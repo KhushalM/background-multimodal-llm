@@ -14,6 +14,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
+from services.service_manager import service_manager
+from models.STT import AudioChunk, TranscriptionResult
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,6 +27,18 @@ app = FastAPI(
     description="WebSocket server for screen sharing and voice assistant",
     version="1.0.0"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    await service_manager.initialize_services()
+    logger.info("All services initialized")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup services on shutdown"""
+    await service_manager.cleanup_services()
+    logger.info("All services cleaned up")
 
 # Add CORS middleware
 app.add_middleware(
@@ -74,7 +89,14 @@ async def root():
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+    return {
+        "status": "healthy", 
+        "timestamp": datetime.now().isoformat(),
+        "services": {
+            "stt": service_manager.get_stt_service() is not None,
+            "ready": service_manager.is_ready()
+        }
+    }
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -192,24 +214,63 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
     """Handle incoming audio data from voice assistant."""
     audio_data = message.get("data", [])
     timestamp = message.get("timestamp")
+    sample_rate = message.get("sample_rate", 16000)
     
-    # Log audio data reception (you would process this with your LLM here)
     logger.debug(f"Received audio data: {len(audio_data)} samples at {timestamp}")
     
-    # Here you would integrate with your multimodal LLM
-    # For now, we'll just send a simple acknowledgment
+    # Get STT service
+    stt_service = service_manager.get_stt_service()
+    if not stt_service:
+        logger.warning("STT service not available")
+        return
     
-    # Simulate processing delay
-    await asyncio.sleep(0.01)
-    
-    # Send back a processing status
-    response = {
-        "type": "audio_processed",
-        "message": f"Processed {len(audio_data)} audio samples",
-        "timestamp": datetime.now().timestamp()
-    }
-    
-    await manager.send_personal_message(json.dumps(response), websocket)
+    try:
+        # Add audio to buffer and check if we have a complete chunk
+        audio_chunk = stt_service.add_audio_to_buffer(audio_data, sample_rate)
+        
+        if audio_chunk:
+            # Transcribe the chunk
+            logger.info("Transcribing audio chunk...")
+            transcription = await stt_service.transcribe_chunk(audio_chunk)
+            
+            if transcription.text:
+                logger.info(f"Transcription: {transcription.text}")
+                
+                # Send transcription back to client
+                response = {
+                    "type": "transcription_result",
+                    "text": transcription.text,
+                    "timestamp": transcription.timestamp,
+                    "processing_time": transcription.processing_time
+                }
+                
+                await manager.send_personal_message(json.dumps(response), websocket)
+                
+                # TODO: Send transcription to multimodal LLM for processing
+                
+            else:
+                logger.debug("Empty transcription result")
+        
+        # Send processing acknowledgment
+        response = {
+            "type": "audio_processed",
+            "message": f"Processed {len(audio_data)} audio samples",
+            "timestamp": datetime.now().timestamp()
+        }
+        
+        await manager.send_personal_message(json.dumps(response), websocket)
+        
+    except Exception as e:
+        logger.error(f"Error processing audio: {e}")
+        
+        # Send error response
+        response = {
+            "type": "error",
+            "message": f"Audio processing error: {str(e)}",
+            "timestamp": datetime.now().timestamp()
+        }
+        
+        await manager.send_personal_message(json.dumps(response), websocket)
 
 if __name__ == "__main__":
     # Run the server
