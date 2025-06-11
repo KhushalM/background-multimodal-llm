@@ -3,7 +3,7 @@ FROM python:3.11-slim-bullseye
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies for cloud-based development
+# Install system dependencies for multimodal AI assistant
 RUN apt-get update && apt-get install -y \
     # Build essentials
     build-essential \
@@ -12,28 +12,41 @@ RUN apt-get update && apt-get install -y \
     wget \
     curl \
     unzip \
-    # Audio processing (lightweight for WebRTC)
+    # Shell and process tools (required for dev container features)
+    bash \
+    procps \
+    # Audio processing for STT/TTS (WebRTC + HuggingFace models)
     ffmpeg \
     portaudio19-dev \
     libasound2-dev \
-    # Image processing (minimal)
+    libsndfile1-dev \
+    # Image processing for screen context analysis
     libjpeg-dev \
     libpng-dev \
-    # Network and security
+    libwebp-dev \
+    # Network and security for API calls
     libssl-dev \
     libffi-dev \
     pkg-config \
-    # Node.js for frontend development
+    ca-certificates \
+    # Node.js for React frontend
     nodejs \
     npm \
+    # Python development tools
+    python3-dev \
+    python3-pip \
     # System utilities
     vim \
     nano \
     htop \
+    # Sudo for user management
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Install git-lfs for dataset management
 RUN git lfs install --system
+
+
 
 # Upgrade pip and install essential Python packages
 RUN pip3 install --no-cache-dir --upgrade \
@@ -41,22 +54,17 @@ RUN pip3 install --no-cache-dir --upgrade \
     setuptools \
     wheel
 
-# Install lightweight ML libraries (CPU-only)
-RUN pip3 install --no-cache-dir \
-    torch \
-    torchvision \
-    torchaudio \
-    --index-url https://download.pytorch.org/whl/cpu
+# Note: No need to install PyTorch since we use cloud inference APIs
+# This saves ~1GB+ in container size and faster startup
 
-# Create workspace directories
-RUN mkdir -p /workspace/{data,logs,frontend,backend,notebooks} && \
+# Create workspace directories for cloud-based AI project  
+RUN mkdir -p /workspace/{data/{hf_cache,samples},logs} && \
     chmod -R 755 /workspace
 
-# Create cache directories for cloud services
-ENV HF_DATASETS_CACHE=/workspace/data/hf_cache
-ENV TRANSFORMERS_CACHE=/workspace/data/transformers_cache
+# Set up minimal cache for API tokens and responses
+ENV HF_HOME=/workspace/data/hf_cache
 
-RUN mkdir -p $HF_DATASETS_CACHE $TRANSFORMERS_CACHE
+RUN mkdir -p $HF_HOME
 
 # Create non-root user for development
 ARG USERNAME=vscode
@@ -65,6 +73,7 @@ ARG USER_GID=$USER_UID
 
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
+    && mkdir -p /etc/sudoers.d \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
@@ -83,16 +92,36 @@ ENV PYTHONPATH="/workspaces/background-multimodal-llm"
 ENV JUPYTER_ENABLE_LAB=yes
 ENV DEVELOPMENT_MODE=cloud
 
-# Pre-install core packages for development
+# Pre-install core packages for multimodal AI assistant
 RUN pip3 install --user --no-cache-dir \
-    fastapi \
-    uvicorn \
-    websockets \
-    openai \
-    huggingface-hub \
-    jupyter \
-    jupyterlab \
-    streamlit
+    # Backend API framework
+    fastapi>=0.104.0 \
+    "uvicorn[standard]>=0.24.0" \
+    websockets>=12.0 \
+    httpx>=0.25.0 \
+    # Cloud AI services (your specific models)
+    openai>=1.3.0 \
+    google-generativeai>=0.3.0 \
+    huggingface-hub>=0.19.0 \
+    # Lightweight tokenizers (for API requests only)
+    tokenizers>=0.15.0 \
+    # Audio processing (only for WebRTC/client-side)
+    pydub>=0.25.0 \
+    # Image processing for screen context
+    Pillow>=10.0.0 \
+    # Data processing
+    numpy>=1.24.0 \
+    pandas>=2.1.0 \
+    # Memory management for conversations
+    langchain>=0.1.0 \
+    langchain-openai>=0.0.5 \
+    langchain-google-genai>=0.0.6 \
+    # Environment and validation
+    python-dotenv>=1.0.0 \
+    pydantic>=2.0.0 \
+    # Development tools
+    jupyter>=1.0.0 \
+    jupyterlab>=4.0.0
 
 # Set up Jupyter configuration
 RUN jupyter lab --generate-config && \
@@ -102,11 +131,11 @@ RUN jupyter lab --generate-config && \
     echo "c.ServerApp.token = ''" >> ~/.jupyter/jupyter_lab_config.py && \
     echo "c.ServerApp.password = ''" >> ~/.jupyter/jupyter_lab_config.py
 
-# Create AWS credentials directory (optional)
-RUN mkdir -p ~/.aws
+# Create directories for API keys and configuration
+RUN mkdir -p ~/.config
 
-# Expose ports for services
-EXPOSE 3000 8000 8888 8501
+# Expose ports for multimodal AI services (internal container ports)
+EXPOSE 3000 5173 8000 8888
 
 # Default command
 CMD ["sleep", "infinity"] 

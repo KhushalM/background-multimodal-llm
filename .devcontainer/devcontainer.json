@@ -3,53 +3,34 @@
     "dockerComposeFile": "docker-compose.yml",
     "service": "app",
     "workspaceFolder": "/workspaces/background-multimodal-llm",
-    "features": {
-        "ghcr.io/devcontainers/features/git:1": {},
-        "ghcr.io/devcontainers/features/github-cli:1": {},
-        "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-        "ghcr.io/devcontainers/features/node:1": {
-            "version": "18"
-        },
-        "ghcr.io/devcontainers/features/aws-cli:1": {},
-        "ghcr.io/devcontainers/features/terraform:1": {}
-    },
+    "features": {},
     "customizations": {
         "vscode": {
             "extensions": [
+                // Python development for AI/ML
                 "ms-python.python",
                 "ms-python.vscode-pylance",
                 "ms-python.black-formatter",
                 "ms-python.isort",
+                "ms-python.flake8",
+                // Jupyter for AI experimentation
                 "ms-toolsai.jupyter",
                 "ms-toolsai.vscode-jupyter-cell-tags",
-                "ms-python.flake8",
-                "njpwerner.autodocstring",
-                "ms-vscode.vscode-json",
-                "redhat.vscode-yaml",
-                "github.copilot",
-                "github.copilot-chat",
-                "ms-vscode.live-server",
-                "ms-vscode.js-debug",
+                // Frontend development (React)
                 "bradlc.vscode-tailwindcss",
                 "esbenp.prettier-vscode",
-                "formulahendry.auto-rename-tag",
-                "amazonwebservices.aws-toolkit-vscode",
-                "ms-vscode.vscode-docker",
-                "hashicorp.terraform"
+                "ms-vscode.live-server",
+                // Configuration files
+                "ms-vscode.vscode-json",
+                "redhat.vscode-yaml",
+                // AI assistance
+                "github.copilot",
+                "github.copilot-chat",
+                // Documentation
+                "njpwerner.autodocstring"
             ],
             "settings": {
                 "python.defaultInterpreterPath": "/usr/local/bin/python",
-                "python.formatting.provider": "black",
-                "python.formatting.blackArgs": [
-                    "--line-length=88"
-                ],
-                "python.linting.enabled": true,
-                "python.linting.pylintEnabled": true,
-                "python.linting.flake8Enabled": true,
-                "python.sortImports.args": [
-                    "--profile",
-                    "black"
-                ],
                 "jupyter.askForKernelRestart": false,
                 "files.associations": {
                     "*.yaml": "yaml",
@@ -65,45 +46,33 @@
         }
     },
     "forwardPorts": [
-        3000,
-        8000,
-        8888,
-        6006,
-        6379,
-        5432
+        3001,
+        5174,
+        8001,
+        8889
     ],
     "portsAttributes": {
-        "3000": {
-            "label": "Frontend (React/WebRTC)",
+        "3001": {
+            "label": "React Frontend (Production)",
             "onAutoForward": "openPreview"
         },
-        "8000": {
-            "label": "FastAPI Backend (Cloud APIs)",
+        "5174": {
+            "label": "Vite Dev Server (Development)",
+            "onAutoForward": "openPreview"
+        },
+        "8001": {
+            "label": "FastAPI Backend (Multimodal AI)",
             "onAutoForward": "notify"
         },
-        "8888": {
-            "label": "Jupyter Lab",
+        "8889": {
+            "label": "Jupyter Lab (AI Experiments)",
             "onAutoForward": "notify"
-        },
-        "6006": {
-            "label": "TensorBoard",
-            "onAutoForward": "notify"
-        },
-        "6379": {
-            "label": "Redis (Caching)",
-            "onAutoForward": "silent"
-        },
-        "5432": {
-            "label": "PostgreSQL (Data)",
-            "onAutoForward": "silent"
         }
     },
     "postCreateCommand": "chmod +x .devcontainer/setup.sh && .devcontainer/setup.sh",
     "remoteUser": "vscode",
     "mounts": [
-        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
-        "source=${localWorkspaceFolder}/.aws,target=/home/vscode/.aws,type=bind",
-        "source=${localWorkspaceFolder}/data,target=/workspace/data,type=bind"
+        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
     ],
     "runArgs": [
         "--platform=linux/amd64"
@@ -112,8 +81,10 @@
         "PYTHONPATH": "/workspaces/background-multimodal-llm",
         "JUPYTER_ENABLE_LAB": "yes",
         "DEVELOPMENT_MODE": "cloud",
-        "AWS_DEFAULT_REGION": "us-east-1",
-        "HF_DATASETS_CACHE": "/workspace/data/hf_cache",
-        "TRANSFORMERS_CACHE": "/workspace/data/transformers_cache"
+        // Cache for API responses only (no model storage needed)
+        "HF_HOME": "/workspace/data/hf_cache",
+        // API endpoints
+        "BACKEND_URL": "http://localhost:8001",
+        "FRONTEND_URL": "http://localhost:3001"
     }
 }

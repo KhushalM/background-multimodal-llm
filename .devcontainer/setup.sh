@@ -39,13 +39,18 @@ fi
 
 # Create simple project structure
 print_info "Creating project structure..."
-mkdir -p {
-    frontend/{src/{components,pages,hooks,utils},public},
-    backend/{api,services,utils},
-    data/{cache,samples},
-    notebooks,
-    scripts
-}
+mkdir -p frontend/src/components \
+         frontend/src/pages \
+         frontend/src/hooks \
+         frontend/src/utils \
+         frontend/public \
+         backend/api \
+         backend/services \
+         backend/utils \
+         data/cache \
+         data/samples \
+         notebooks \
+         scripts
 
 print_status "Project structure created"
 
@@ -135,8 +140,8 @@ cat > frontend/package.json << 'EOF'
 EOF
 
 # Set up Jupyter
-print_info "Configuring Jupyter Lab..."
-jupyter lab --generate-config --allow-root 2>/dev/null || true
+#print_info "Configuring Jupyter Lab..."
+#jupyter lab --generate-config --allow-root 2>/dev/null || true
 
 # Create a simple getting started notebook
 cat > notebooks/getting_started.ipynb << 'EOF'
