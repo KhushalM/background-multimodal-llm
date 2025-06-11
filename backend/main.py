@@ -17,6 +17,7 @@ import uvicorn
 from services.service_manager import service_manager
 from models.STT import AudioChunk, TranscriptionResult
 from models.multimodal import ConversationInput, ConversationResponse
+from models.TTS import TTSRequest, TTSResponse
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -96,6 +97,7 @@ async def health():
         "services": {
             "stt": service_manager.get_stt_service() is not None,
             "multimodal": service_manager.get_multimodal_service() is not None,
+            "tts": service_manager.get_tts_service() is not None,
             "ready": service_manager.is_ready()
         }
     }
@@ -316,6 +318,9 @@ async def process_with_multimodal_llm(websocket: WebSocket, text: str, timestamp
         
         await manager.send_personal_message(json.dumps(response), websocket)
         
+        # Convert AI response to speech
+        await process_with_tts(websocket, ai_response.text, ai_response.session_id)
+        
     except Exception as e:
         logger.error(f"Error processing with multimodal LLM: {e}")
         
@@ -323,6 +328,55 @@ async def process_with_multimodal_llm(websocket: WebSocket, text: str, timestamp
         error_response = {
             "type": "error",
             "message": f"AI processing error: {str(e)}",
+            "timestamp": datetime.now().timestamp()
+        }
+        
+        await manager.send_personal_message(json.dumps(error_response), websocket)
+
+async def process_with_tts(websocket: WebSocket, text: str, session_id: str):
+    """Convert AI response text to speech"""
+    try:
+        # Get TTS service
+        tts_service = service_manager.get_tts_service()
+        if not tts_service:
+            logger.warning("TTS service not available")
+            return
+        
+        logger.info(f"Converting to speech: {text[:100]}...")
+        
+        # Create TTS request
+        tts_request = TTSRequest(
+            text=text,
+            voice_preset="default",
+            session_id=session_id
+        )
+        
+        # Generate speech
+        tts_response = await tts_service.synthesize_speech(tts_request)
+        
+        logger.info(f"Generated {tts_response.duration:.2f}s of speech in {tts_response.processing_time:.2f}s")
+        
+        # Send audio response back to client
+        audio_response = {
+            "type": "audio_response",
+            "audio_data": tts_response.audio_data,
+            "sample_rate": tts_response.sample_rate,
+            "duration": tts_response.duration,
+            "processing_time": tts_response.processing_time,
+            "text": tts_response.text,
+            "timestamp": datetime.now().timestamp(),
+            "session_id": session_id
+        }
+        
+        await manager.send_personal_message(json.dumps(audio_response), websocket)
+        
+    except Exception as e:
+        logger.error(f"Error processing with TTS: {e}")
+        
+        # Send error response
+        error_response = {
+            "type": "error",
+            "message": f"TTS processing error: {str(e)}",
             "timestamp": datetime.now().timestamp()
         }
         

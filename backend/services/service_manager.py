@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from models.STT import STTService, create_stt_service
 from models.multimodal import MultimodalService, create_multimodal_service
+from models.TTS import TTSService, create_tts_service
 
 # Load environment variables
 load_dotenv()
@@ -17,7 +18,7 @@ class ServiceManager:
     def __init__(self):
         self.stt_service: Optional[STTService] = None
         self.multimodal_service: Optional[MultimodalService] = None
-        self.tts_service = None  # Will implement next
+        self.tts_service: Optional[TTSService] = None
         
         # API tokens from environment
         self.hf_token = os.getenv("HUGGINGFACE_API_TOKEN")
@@ -47,6 +48,17 @@ class ServiceManager:
                 logger.info("Multimodal service initialized successfully")
             else:
                 logger.warning("No Gemini API key found, Multimodal service not available")
+                
+            # Initialize TTS service
+            if self.hf_token:
+                logger.info("Initializing TTS service...")
+                self.tts_service = await create_tts_service(
+                    hf_token=self.hf_token,
+                    model_name="microsoft/speecht5_tts"
+                )
+                logger.info("TTS service initialized successfully")
+            else:
+                logger.warning("No HuggingFace token found, TTS service not available")
             
         except Exception as e:
             logger.error(f"Error initializing services: {e}")
@@ -56,6 +68,8 @@ class ServiceManager:
         """Clean up all services"""
         if self.stt_service:
             await self.stt_service.__aexit__(None, None, None)
+        if self.tts_service:
+            await self.tts_service.__aexit__(None, None, None)
             
     def get_stt_service(self) -> Optional[STTService]:
         """Get the STT service instance"""
@@ -65,9 +79,15 @@ class ServiceManager:
         """Get the Multimodal service instance"""
         return self.multimodal_service
     
+    def get_tts_service(self) -> Optional[TTSService]:
+        """Get the TTS service instance"""
+        return self.tts_service
+    
     def is_ready(self) -> bool:
         """Check if essential services are ready"""
-        return self.stt_service is not None and self.multimodal_service is not None
+        return (self.stt_service is not None and 
+                self.multimodal_service is not None and 
+                self.tts_service is not None)
 
 # Global service manager instance
 service_manager = ServiceManager() 
