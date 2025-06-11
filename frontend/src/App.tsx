@@ -10,6 +10,8 @@ import {
   Text,
   Container
 } from '@chakra-ui/react'
+import { useVoiceActivityDetection } from './hooks/useVoiceActivityDetection'
+import { ConversationDisplay } from './components/ConversationDisplay'
 
 interface AppState {
   isScreenSharing: boolean
@@ -24,10 +26,35 @@ const App: React.FC = () => {
     isConnected: false
   })
   const [statusMessage, setStatusMessage] = useState<string>('')
+  const [aiResponse, setAiResponse] = useState<string>('')
+  const [isAiSpeaking, setIsAiSpeaking] = useState<boolean>(false)
+  const [speechDetected, setSpeechDetected] = useState<boolean>(false)
+  const [audioEnergy, setAudioEnergy] = useState<number>(0)
+  const [currentTranscription, setCurrentTranscription] = useState<string>('')
+  const [messages, setMessages] = useState<Array<{
+    id: string
+    type: 'user' | 'ai' | 'system'
+    text: string
+    timestamp: number
+    metadata?: {
+      processing_time?: number
+      confidence?: number
+      audio_duration?: number
+    }
+  }>>([])
+  const [messageCounter, setMessageCounter] = useState<number>(0)
 
   const wsRef = useRef<WebSocket | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
+  const playbackAudioContextRef = useRef<AudioContext | null>(null)
+  
+  // Voice Activity Detection
+  const vad = useVoiceActivityDetection({
+    minSpeechDuration: 200,
+    maxSilenceDuration: 800,
+    energyThreshold: 0.008
+  })
 
   // WebSocket connection setup
   useEffect(() => {
@@ -51,9 +78,49 @@ const App: React.FC = () => {
           setStatusMessage('Failed to connect to server')
         }
 
-        wsRef.current.onmessage = (event) => {
+        wsRef.current.onmessage = async (event) => {
           // Handle incoming messages from server
-          console.log('Received:', event.data)
+          const data = JSON.parse(event.data)
+          console.log('Received:', data)
+          
+          if (data.type === 'transcription_result') {
+            setStatusMessage(`Transcribed: "${data.text}"`)
+            // Add user message
+            setMessages(prev => [...prev, {
+              id: `msg_${messageCounter}_user`,
+              type: 'user',
+              text: data.text,
+              timestamp: Date.now(),
+              metadata: {
+                confidence: data.confidence,
+                processing_time: data.processing_time
+              }
+            }])
+            setMessageCounter(prev => prev + 1)
+            setCurrentTranscription('')
+          } else if (data.type === 'ai_response') {
+            setAiResponse(data.text)
+            setStatusMessage(`AI: "${data.text}"`)
+            // Add AI message
+            setMessages(prev => [...prev, {
+              id: `msg_${messageCounter}_ai`,
+              type: 'ai',
+              text: data.text,
+              timestamp: Date.now(),
+              metadata: {
+                processing_time: data.processing_time
+              }
+            }])
+            setMessageCounter(prev => prev + 1)
+          } else if (data.type === 'audio_response') {
+            // Auto-play TTS audio response
+            await playAudioResponse(data)
+          } else if (data.type === 'partial_transcription') {
+            // Update live transcription
+            setCurrentTranscription(data.text)
+          } else if (data.type === 'error') {
+            setStatusMessage(`Error: ${data.message}`)
+          }
         }
       } catch (error) {
         console.error('WebSocket connection error:', error)
@@ -69,6 +136,56 @@ const App: React.FC = () => {
       }
     }
   }, [])
+
+  // Audio playback functionality
+  const playAudioResponse = async (audioData: any) => {
+    try {
+      setIsAiSpeaking(true)
+      setStatusMessage(`AI is speaking... (${audioData.duration?.toFixed(1)}s)`)
+      
+      // Initialize playback audio context if needed
+      if (!playbackAudioContextRef.current) {
+        playbackAudioContextRef.current = new AudioContext()
+      }
+      
+      const audioContext = playbackAudioContextRef.current
+      
+      // Resume audio context if suspended (browser policy)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume()
+      }
+      
+      // Convert float array to audio buffer
+      const audioSamples = new Float32Array(audioData.audio_data)
+      const audioBuffer = audioContext.createBuffer(
+        1, // mono
+        audioSamples.length,
+        audioData.sample_rate
+      )
+      
+      // Copy data to audio buffer
+      audioBuffer.getChannelData(0).set(audioSamples)
+      
+      // Create and configure audio source
+      const source = audioContext.createBufferSource()
+      source.buffer = audioBuffer
+      source.connect(audioContext.destination)
+      
+      // Handle playback completion
+      source.onended = () => {
+        setIsAiSpeaking(false)
+        setStatusMessage('AI finished speaking')
+      }
+      
+      // Start playback
+      source.start()
+      
+    } catch (error) {
+      console.error('Error playing audio:', error)
+      setIsAiSpeaking(false)
+      setStatusMessage('Failed to play AI audio response')
+    }
+  }
 
   // Screen sharing functionality
   const toggleScreenShare = async () => {
@@ -139,13 +256,24 @@ const App: React.FC = () => {
         processor.onaudioprocess = (event) => {
           const inputBuffer = event.inputBuffer.getChannelData(0)
           
-          // Send audio data through WebSocket
-          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          // Voice Activity Detection
+          const vadResult = vad.processAudio(inputBuffer, Date.now())
+          setSpeechDetected(vadResult.isSpeaking)
+          setAudioEnergy(vadResult.energy)
+          
+          // Only send audio when speech is detected (reduces bandwidth)
+          if (vadResult.isSpeaking && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             const audioData = Array.from(inputBuffer)
             wsRef.current.send(JSON.stringify({
               type: 'audio_data',
               data: audioData,
-              timestamp: Date.now()
+              sample_rate: audioContextRef.current?.sampleRate || 16000,
+              timestamp: Date.now(),
+              vad: {
+                isSpeaking: vadResult.isSpeaking,
+                energy: vadResult.energy,
+                confidence: vadResult.confidence
+              }
             }))
           }
         }
@@ -182,6 +310,9 @@ const App: React.FC = () => {
         }
 
         setState(prev => ({ ...prev, isVoiceActive: false }))
+        setSpeechDetected(false)
+        setAudioEnergy(0)
+        vad.reset()
         setStatusMessage('Voice assistant deactivated')
       }
     } catch (error) {
@@ -217,6 +348,39 @@ const App: React.FC = () => {
               >
                 {state.isConnected ? 'Connected' : 'Disconnected'}
               </Badge>
+              {isAiSpeaking && (
+                <Badge
+                  colorPalette="blue"
+                  variant="solid"
+                  px={3}
+                  py={1}
+                  borderRadius="full"
+                >
+                  🔊 AI Speaking
+                </Badge>
+              )}
+              {speechDetected && (
+                <Badge
+                  colorPalette="green"
+                  variant="solid"
+                  px={3}
+                  py={1}
+                  borderRadius="full"
+                >
+                  🎤 Speech Detected
+                </Badge>
+              )}
+              {state.isVoiceActive && !speechDetected && (
+                <Badge
+                  colorPalette="gray"
+                  variant="outline"
+                  px={3}
+                  py={1}
+                  borderRadius="full"
+                >
+                  🎧 Listening...
+                </Badge>
+              )}
             </HStack>
           </VStack>
 
@@ -260,11 +424,21 @@ const App: React.FC = () => {
             </Button>
           </HStack>
 
+          {/* Enhanced Conversation Display */}
+          <ConversationDisplay
+            messages={messages}
+            isAiSpeaking={isAiSpeaking}
+            speechDetected={speechDetected}
+            audioEnergy={audioEnergy}
+            currentTranscription={currentTranscription}
+          />
+
           <VStack gap={2} textAlign="center" color="gray.500">
             <Text fontSize="sm">
               Status: {state.isScreenSharing && 'Screen Sharing Active'} 
               {state.isVoiceActive && 'Voice Assistant Active'}
-              {!state.isScreenSharing && !state.isVoiceActive && 'Ready'}
+              {isAiSpeaking && 'AI Speaking'}
+              {!state.isScreenSharing && !state.isVoiceActive && !isAiSpeaking && 'Ready'}
             </Text>
             <Text fontSize="xs">
               Ensure your browser supports screen sharing and microphone access

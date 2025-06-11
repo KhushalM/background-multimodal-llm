@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from services.service_manager import service_manager
+from services.performance_monitor import performance_monitor, PerformanceTimer
 from models.STT import AudioChunk, TranscriptionResult
 from models.multimodal import ConversationInput, ConversationResponse
 from models.TTS import TTSRequest, TTSResponse
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 # FastAPI app instance
 app = FastAPI(
     title="Background Multimodal LLM API",
-    description="WebSocket server for screen sharing and voice assistant",
+    description="WebSocket server for screen sharing and voice assistant with integrated screen context",
     version="1.0.0"
 )
 
@@ -96,10 +97,31 @@ async def health():
         "timestamp": datetime.now().isoformat(),
         "services": {
             "stt": service_manager.get_stt_service() is not None,
-            "multimodal": service_manager.get_multimodal_service() is not None,
+            "multimodal_with_screen_context": service_manager.get_multimodal_service() is not None,
             "tts": service_manager.get_tts_service() is not None,
-            "ready": service_manager.is_ready()
-        }
+            "ready": service_manager.is_ready(),
+            "fully_ready": service_manager.is_fully_ready()
+        },
+        "performance": performance_monitor.get_performance_summary()
+    }
+
+@app.get("/performance")
+async def get_performance():
+    """Get detailed performance metrics and optimization recommendations."""
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "summary": performance_monitor.get_performance_summary(),
+        "recommendations": performance_monitor.get_optimization_recommendations(),
+        "optimizations": performance_monitor.optimizations
+    }
+
+@app.post("/performance/optimize")
+async def optimize_performance():
+    """Apply automatic performance optimizations."""
+    result = performance_monitor.optimize_automatically()
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "optimization_result": result
     }
 
 @app.websocket("/ws")
@@ -219,8 +241,11 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
     audio_data = message.get("data", [])
     timestamp = message.get("timestamp")
     sample_rate = message.get("sample_rate", 16000)
+    screen_image = message.get("screen_image")  # Optional screen capture
     
     logger.debug(f"Received audio data: {len(audio_data)} samples at {timestamp}")
+    if screen_image:
+        logger.debug("Screen image included with audio data")
     
     # Get STT service
     stt_service = service_manager.get_stt_service()
@@ -233,9 +258,10 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
         audio_chunk = stt_service.add_audio_to_buffer(audio_data, sample_rate)
         
         if audio_chunk:
-            # Transcribe the chunk
+            # Transcribe the chunk with performance monitoring
             logger.info("Transcribing audio chunk...")
-            transcription = await stt_service.transcribe_chunk(audio_chunk)
+            async with PerformanceTimer(performance_monitor, "stt", "transcribe_chunk"):
+                transcription = await stt_service.transcribe_chunk(audio_chunk)
             
             if transcription.text:
                 logger.info(f"Transcription: {transcription.text}")
@@ -250,8 +276,8 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
                 
                 await manager.send_personal_message(json.dumps(response), websocket)
                 
-                # Send transcription to multimodal LLM for processing
-                await process_with_multimodal_llm(websocket, transcription.text, transcription.timestamp)
+                # Send transcription to multimodal LLM for processing (with optional screen context)
+                await process_with_multimodal_llm(websocket, transcription.text, transcription.timestamp, screen_image)
                 
             else:
                 logger.debug("Empty transcription result")
@@ -277,8 +303,8 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
         
         await manager.send_personal_message(json.dumps(response), websocket)
 
-async def process_with_multimodal_llm(websocket: WebSocket, text: str, timestamp: float):
-    """Process transcribed text with the multimodal LLM"""
+async def process_with_multimodal_llm(websocket: WebSocket, text: str, timestamp: float, screen_image: str = None):
+    """Process transcribed text with the multimodal LLM (with optional screen context)"""
     try:
         # Get multimodal service
         multimodal_service = service_manager.get_multimodal_service()
@@ -297,17 +323,21 @@ async def process_with_multimodal_llm(websocket: WebSocket, text: str, timestamp
             context={
                 "time_info": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "app_info": "Background Multimodal Assistant"
-            }
+            },
+            screen_image=screen_image  # Include screen image if available
         )
         
         logger.info(f"Processing with multimodal LLM: {text}")
+        if screen_image:
+            logger.info("Including screen context in conversation processing")
         
-        # Generate AI response
-        ai_response = await multimodal_service.process_conversation(conversation_input)
+        # Generate AI response with performance monitoring (includes screen analysis if image provided)
+        async with PerformanceTimer(performance_monitor, "multimodal", "process_conversation"):
+            ai_response = await multimodal_service.process_conversation(conversation_input)
         
         logger.info(f"AI Response: {ai_response.text}")
         
-        # Send AI response back to client
+        # Send AI response back to client (including screen context if available)
         response = {
             "type": "ai_response",
             "text": ai_response.text,
@@ -315,6 +345,10 @@ async def process_with_multimodal_llm(websocket: WebSocket, text: str, timestamp
             "processing_time": ai_response.processing_time,
             "session_id": ai_response.session_id
         }
+        
+        # Include screen context in response if available
+        if ai_response.screen_context:
+            response["screen_context"] = ai_response.screen_context
         
         await manager.send_personal_message(json.dumps(response), websocket)
         
@@ -351,8 +385,9 @@ async def process_with_tts(websocket: WebSocket, text: str, session_id: str):
             session_id=session_id
         )
         
-        # Generate speech
-        tts_response = await tts_service.synthesize_speech(tts_request)
+        # Generate speech with performance monitoring
+        async with PerformanceTimer(performance_monitor, "tts", "synthesize_speech"):
+            tts_response = await tts_service.synthesize_speech(tts_request)
         
         logger.info(f"Generated {tts_response.duration:.2f}s of speech in {tts_response.processing_time:.2f}s")
         

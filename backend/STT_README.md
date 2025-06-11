@@ -14,10 +14,11 @@ The STT service converts real-time audio streams to text using HuggingFace's Whi
 
 ## Models Supported
 
-- `openai/whisper-large-v3` (default) - Best accuracy
+- `distil-whisper/distil-large-v3.5` (default) - Optimized for speed and accuracy
+- `openai/whisper-large-v3` - Best accuracy but slower
 - `openai/whisper-medium` - Good balance
 - `openai/whisper-small` - Faster inference
-- `distil-whisper/distil-large-v3` - Optimized for speed
+- `distil-whisper/distil-large-v3` - Alternative optimized version
 
 ## Setup
 
@@ -92,7 +93,7 @@ if final_chunk:
 ```python
 @dataclass
 class STTConfig:
-    model_name: str = "openai/whisper-large-v3"  # HF model to use
+    model_name: str = "distil-whisper/distil-large-v3.5"  # HF model to use
     hf_token: Optional[str] = None               # HF API token
     sample_rate: int = 16000                     # Target sample rate
     chunk_duration: float = 2.0                 # Chunk size in seconds
@@ -105,7 +106,7 @@ class STTConfig:
 **Low Latency (Real-time chat)**:
 ```python
 config = STTConfig(
-    model_name="distil-whisper/distil-large-v3",
+    model_name="distil-whisper/distil-large-v3.5",
     chunk_duration=1.0,  # Smaller chunks
     timeout=10.0
 )

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class STTConfig:
     """Configuration for Speech-to-Text service"""
-    model_name: str = "openai/whisper-large-v3"
+    model_name: str = "distil-whisper/distil-large-v3.5"
     hf_token: Optional[str] = None
     sample_rate: int = 16000
     chunk_duration: float = 2.0  # seconds
@@ -216,7 +216,7 @@ class STTService:
         return None
 
 # Factory function for easy instantiation
-async def create_stt_service(hf_token: str, model_name: str = "openai/whisper-large-v3") -> STTService:
+async def create_stt_service(hf_token: str, model_name: str = "distil-whisper/distil-large-v3.5") -> STTService:
     """Create and initialize STT service"""
     config = STTConfig(
         model_name=model_name,

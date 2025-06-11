@@ -13,7 +13,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class ServiceManager:
-    """Manages all AI services (STT, Multimodal, TTS)"""
+    """Manages all AI services (STT, Multimodal with Screen Context, TTS)"""
     
     def __init__(self):
         self.stt_service: Optional[STTService] = None
@@ -32,20 +32,20 @@ class ServiceManager:
                 logger.info("Initializing STT service...")
                 self.stt_service = await create_stt_service(
                     hf_token=self.hf_token,
-                    model_name="openai/whisper-large-v3"
+                    model_name="distil-whisper/distil-large-v3.5"
                 )
                 logger.info("STT service initialized successfully")
             else:
                 logger.warning("No HuggingFace token found, STT service not available")
                 
-            # Initialize Multimodal service
+            # Initialize Multimodal service (now includes screen context)
             if self.gemini_token:
-                logger.info("Initializing Multimodal service...")
+                logger.info("Initializing Multimodal service with screen context...")
                 self.multimodal_service = await create_multimodal_service(
                     api_key=self.gemini_token,
-                    model_name="gemini-1.5-flash"
+                    model_name="gemini-2.0-flash-exp"
                 )
-                logger.info("Multimodal service initialized successfully")
+                logger.info("Multimodal service with screen context initialized successfully")
             else:
                 logger.warning("No Gemini API key found, Multimodal service not available")
                 
@@ -76,7 +76,7 @@ class ServiceManager:
         return self.stt_service
     
     def get_multimodal_service(self) -> Optional[MultimodalService]:
-        """Get the Multimodal service instance"""
+        """Get the Multimodal service instance (includes screen context)"""
         return self.multimodal_service
     
     def get_tts_service(self) -> Optional[TTSService]:
@@ -88,6 +88,10 @@ class ServiceManager:
         return (self.stt_service is not None and 
                 self.multimodal_service is not None and 
                 self.tts_service is not None)
+    
+    def is_fully_ready(self) -> bool:
+        """Check if all services are ready (same as is_ready since screen context is integrated)"""
+        return self.is_ready()
 
 # Global service manager instance
 service_manager = ServiceManager() 

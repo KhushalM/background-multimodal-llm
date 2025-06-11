@@ -1,0 +1,257 @@
+# =============================================================================
+# Multimodal AI Assistant - .gitignore
+# =============================================================================
+
+# Python Virtual Environments
+# ----------------------------
+backend/venv/
+backend/.venv/
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python Cache and Bytecode
+# --------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environment Variables and Secrets
+# ----------------------------------
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/.env
+backend/.env.*
+*.env
+
+# API Keys and Credentials
+# ------------------------
+*api_key*
+*secret*
+*token*
+credentials.json
+service-account*.json
+
+# ML Model Files and Data
+# -----------------------
+*.pkl
+*.joblib
+*.h5
+*.onnx
+*.pb
+*.tflite
+models/
+checkpoints/
+weights/
+data/raw/
+data/processed/
+datasets/
+*.csv
+*.json
+*.parquet
+
+# Cache Directories
+# -----------------
+.cache/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# HuggingFace Cache
+.cache/huggingface/
+transformers_cache/
+hf_cache/
+
+# Jupyter Notebook
+# ----------------
+.ipynb_checkpoints
+*.ipynb
+
+# IDE and Editor Files
+# --------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Frontend Dependencies
+# ---------------------
+frontend/node_modules/
+frontend/.next/
+frontend/build/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+
+# Logs and Temporary Files
+# ------------------------
+*.log
+logs/
+tmp/
+temp/
+.tmp/
+
+# Audio/Video Files (for testing)
+# -------------------------------
+*.wav
+*.mp3
+*.mp4
+*.avi
+*.mov
+test_audio/
+test_video/
+recordings/
+
+# Images (for testing)
+# --------------------
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+test_images/
+screenshots/
+
+# Docker
+# ------
+.dockerignore
+docker-compose.override.yml
+
+# OS Generated Files
+# ------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Package Managers
+# ----------------
+pip-log.txt
+pip-delete-this-directory.txt
+
+# PyInstaller
+# -----------
+*.manifest
+*.spec
+
+# Unit Test / Coverage Reports
+# ----------------------------
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+# ------------
+*.mo
+*.pot
+
+# Django/Flask (if used)
+# ----------------------
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
+
+# Celery
+# ------
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath
+# --------
+*.sage.py
+
+# Spyder
+# ------
+.spyderproject
+.spyproject
+
+# Rope
+# ----
+.ropeproject
+
+# mkdocs
+# ------
+/site
+
+# mypy
+# ----
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+# ----
+.pyre/
+
+# pytype
+# ------
+.pytype/
+
+# Cython
+# ------
+cython_debug/
+
+# =============================================================================
+# IMPORTANT: What TO INCLUDE (not ignored)
+# =============================================================================
+# These files SHOULD be tracked in git:
+# - backend/requirements.txt
+# - backend/pyproject.toml
+# - backend/env.example (template)
+# - backend/INSTALL.md
+# - backend/*.py (source code)
+# - frontend/package.json
+# - README.md
+# - .gitignore (this file)
+# =============================================================================

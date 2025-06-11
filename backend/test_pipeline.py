@@ -32,7 +32,7 @@ async def test_complete_pipeline():
         return
     
     print("🚀 Testing Complete Conversation Pipeline")
-    print("STT → Multimodal → TTS")
+    print("Distil-Whisper STT → Gemini 2.0 Flash Multimodal → SpeechT5 TTS")
     print("=" * 60)
     
     try:
