@@ -4,6 +4,7 @@ from typing import Optional
 from dotenv import load_dotenv
 
 from models.STT import STTService, create_stt_service
+from models.multimodal import MultimodalService, create_multimodal_service
 
 # Load environment variables
 load_dotenv()
@@ -15,7 +16,7 @@ class ServiceManager:
     
     def __init__(self):
         self.stt_service: Optional[STTService] = None
-        self.multimodal_service = None  # Will implement next
+        self.multimodal_service: Optional[MultimodalService] = None
         self.tts_service = None  # Will implement next
         
         # API tokens from environment
@@ -36,7 +37,16 @@ class ServiceManager:
             else:
                 logger.warning("No HuggingFace token found, STT service not available")
                 
-            # TODO: Initialize other services
+            # Initialize Multimodal service
+            if self.gemini_token:
+                logger.info("Initializing Multimodal service...")
+                self.multimodal_service = await create_multimodal_service(
+                    api_key=self.gemini_token,
+                    model_name="gemini-1.5-flash"
+                )
+                logger.info("Multimodal service initialized successfully")
+            else:
+                logger.warning("No Gemini API key found, Multimodal service not available")
             
         except Exception as e:
             logger.error(f"Error initializing services: {e}")
@@ -51,9 +61,13 @@ class ServiceManager:
         """Get the STT service instance"""
         return self.stt_service
     
+    def get_multimodal_service(self) -> Optional[MultimodalService]:
+        """Get the Multimodal service instance"""
+        return self.multimodal_service
+    
     def is_ready(self) -> bool:
         """Check if essential services are ready"""
-        return self.stt_service is not None
+        return self.stt_service is not None and self.multimodal_service is not None
 
 # Global service manager instance
 service_manager = ServiceManager() 

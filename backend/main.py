@@ -16,6 +16,7 @@ import uvicorn
 
 from services.service_manager import service_manager
 from models.STT import AudioChunk, TranscriptionResult
+from models.multimodal import ConversationInput, ConversationResponse
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -94,6 +95,7 @@ async def health():
         "timestamp": datetime.now().isoformat(),
         "services": {
             "stt": service_manager.get_stt_service() is not None,
+            "multimodal": service_manager.get_multimodal_service() is not None,
             "ready": service_manager.is_ready()
         }
     }
@@ -246,7 +248,8 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
                 
                 await manager.send_personal_message(json.dumps(response), websocket)
                 
-                # TODO: Send transcription to multimodal LLM for processing
+                # Send transcription to multimodal LLM for processing
+                await process_with_multimodal_llm(websocket, transcription.text, transcription.timestamp)
                 
             else:
                 logger.debug("Empty transcription result")
@@ -271,6 +274,59 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
         }
         
         await manager.send_personal_message(json.dumps(response), websocket)
+
+async def process_with_multimodal_llm(websocket: WebSocket, text: str, timestamp: float):
+    """Process transcribed text with the multimodal LLM"""
+    try:
+        # Get multimodal service
+        multimodal_service = service_manager.get_multimodal_service()
+        if not multimodal_service:
+            logger.warning("Multimodal service not available")
+            return
+        
+        # Create conversation input
+        # Use websocket ID as session ID for now (you might want a more sophisticated session management)
+        session_id = f"ws_{id(websocket)}"
+        
+        conversation_input = ConversationInput(
+            text=text,
+            session_id=session_id,
+            timestamp=timestamp,
+            context={
+                "time_info": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "app_info": "Background Multimodal Assistant"
+            }
+        )
+        
+        logger.info(f"Processing with multimodal LLM: {text}")
+        
+        # Generate AI response
+        ai_response = await multimodal_service.process_conversation(conversation_input)
+        
+        logger.info(f"AI Response: {ai_response.text}")
+        
+        # Send AI response back to client
+        response = {
+            "type": "ai_response",
+            "text": ai_response.text,
+            "timestamp": ai_response.timestamp,
+            "processing_time": ai_response.processing_time,
+            "session_id": ai_response.session_id
+        }
+        
+        await manager.send_personal_message(json.dumps(response), websocket)
+        
+    except Exception as e:
+        logger.error(f"Error processing with multimodal LLM: {e}")
+        
+        # Send error response
+        error_response = {
+            "type": "error",
+            "message": f"AI processing error: {str(e)}",
+            "timestamp": datetime.now().timestamp()
+        }
+        
+        await manager.send_personal_message(json.dumps(error_response), websocket)
 
 if __name__ == "__main__":
     # Run the server
