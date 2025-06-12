@@ -13,9 +13,6 @@
                 "ms-python.black-formatter",
                 "ms-python.isort",
                 "ms-python.flake8",
-                // Jupyter for AI experimentation
-                "ms-toolsai.jupyter",
-                "ms-toolsai.vscode-jupyter-cell-tags",
                 // Frontend development (React)
                 "bradlc.vscode-tailwindcss",
                 "esbenp.prettier-vscode",
@@ -31,7 +28,6 @@
             ],
             "settings": {
                 "python.defaultInterpreterPath": "/usr/local/bin/python",
-                "jupyter.askForKernelRestart": false,
                 "files.associations": {
                     "*.yaml": "yaml",
                     "*.yml": "yaml",
@@ -46,26 +42,16 @@
         }
     },
     "forwardPorts": [
-        3001,
-        5174,
-        8001,
-        8889
+        3000,
+        8000
     ],
     "portsAttributes": {
-        "3001": {
-            "label": "React Frontend (Production)",
+        "3000": {
+            "label": "React Frontend (Create React App)",
             "onAutoForward": "openPreview"
         },
-        "5174": {
-            "label": "Vite Dev Server (Development)",
-            "onAutoForward": "openPreview"
-        },
-        "8001": {
+        "8000": {
             "label": "FastAPI Backend (Multimodal AI)",
-            "onAutoForward": "notify"
-        },
-        "8889": {
-            "label": "Jupyter Lab (AI Experiments)",
             "onAutoForward": "notify"
         }
     },
@@ -79,12 +65,11 @@
     ],
     "containerEnv": {
         "PYTHONPATH": "/workspaces/background-multimodal-llm",
-        "JUPYTER_ENABLE_LAB": "yes",
         "DEVELOPMENT_MODE": "cloud",
         // Cache for API responses only (no model storage needed)
         "HF_HOME": "/workspace/data/hf_cache",
         // API endpoints
-        "BACKEND_URL": "http://localhost:8001",
-        "FRONTEND_URL": "http://localhost:3001"
+        "BACKEND_URL": "http://localhost:8000",
+        "FRONTEND_URL": "http://localhost:3000"
     }
 }

@@ -15,7 +15,6 @@ services:
     command: sleep infinity
     environment:
       - PYTHONPATH=/workspaces/background-multimodal-llm
-      - JUPYTER_ENABLE_LAB=yes
       - DEVELOPMENT_MODE=cloud
       # Cloud service configurations
       - AWS_DEFAULT_REGION=us-east-1
@@ -29,10 +28,8 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN:-}
     ports:
-      - "3001:3000" # React frontend (mapped to avoid conflicts)
-      - "5174:5173" # Vite dev server (mapped to avoid conflicts)
-      - "8001:8000" # FastAPI backend (mapped to avoid conflicts)
-      - "8889:8888" # Jupyter Lab (mapped to avoid conflicts)
+      - "3000:3000" # React frontend (Create React App)
+      - "8000:8000" # FastAPI backend
     platform: linux/amd64
 
 volumes:

@@ -44,13 +44,11 @@ mkdir -p frontend/src/components \
          frontend/src/hooks \
          frontend/src/utils \
          frontend/public \
-         backend/api \
+
          backend/services \
          backend/utils \
-         data/cache \
-         data/samples \
-         notebooks \
-         scripts
+         
+
 
 print_status "Project structure created"
 
@@ -139,72 +137,6 @@ cat > frontend/package.json << 'EOF'
 }
 EOF
 
-# Set up Jupyter
-#print_info "Configuring Jupyter Lab..."
-#jupyter lab --generate-config --allow-root 2>/dev/null || true
-
-# Create a simple getting started notebook
-cat > notebooks/getting_started.ipynb << 'EOF'
-{
- "cells": [
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
-    "# Personal AI Assistant - Getting Started\n",
-    "\n",
-    "Quick setup and testing of your cloud-based AI assistant."
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "import os\n",
-    "from dotenv import load_dotenv\n",
-    "\n",
-    "load_dotenv()\n",
-    "\n",
-    "print(\"API Keys Status:\")\n",
-    "print(f\"OpenAI: {'✅' if os.getenv('OPENAI_API_KEY') else '❌'}\")\n",
-    "print(f\"HuggingFace: {'✅' if os.getenv('HUGGINGFACE_API_TOKEN') else '❌'}\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Test OpenAI API\n",
-    "try:\n",
-    "    import openai\n",
-    "    client = openai.OpenAI()\n",
-    "    response = client.chat.completions.create(\n",
-    "        model=\"gpt-3.5-turbo\",\n",
-    "        messages=[{\"role\": \"user\", \"content\": \"Hello!\"}],\n",
-    "        max_tokens=20\n",
-    "    )\n",
-    "    print(\"OpenAI Response:\", response.choices[0].message.content)\n",
-    "except Exception as e:\n",
-    "    print(f\"OpenAI Error: {e}\")"
-   ]
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "Python 3",
-   "language": "python",
-   "name": "python3"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 4
-}
-EOF
-
 # Install frontend dependencies if npm is available
 if command -v npm &> /dev/null; then
     print_info "Installing frontend dependencies..."
@@ -218,13 +150,15 @@ print_info "🚀 Quick Start:"
 echo "  1. Copy .env.example to .env and add your API keys"
 echo "  2. Start backend: python backend/main.py"
 echo "  3. Start frontend: cd frontend && npm start"
-echo "  4. Open Jupyter: jupyter lab"
-echo "  5. Try Streamlit: streamlit run your_app.py"
+echo "  4. Try Streamlit: streamlit run your_app.py"
+echo ""
+print_info "🌐 Access URLs:"
+echo "  Frontend (React): http://localhost:3000"
+echo "  Backend (FastAPI): http://localhost:8000"
 echo ""
 print_info "📂 Simple Structure:"
-echo "  frontend/: React app"
+echo "  frontend/: React app (Create React App)"
 echo "  backend/: FastAPI server"
-echo "  notebooks/: Jupyter experiments"
 echo "  data/: Local data storage"
 echo ""
 print_status "Ready to build your AI assistant! 🤖" 

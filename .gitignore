@@ -95,10 +95,7 @@ coverage.xml
 transformers_cache/
 hf_cache/
 
-# Jupyter Notebook
-# ----------------
-.ipynb_checkpoints
-*.ipynb
+
 
 # IDE and Editor Files
 # --------------------

@@ -89,7 +89,6 @@ WORKDIR /workspaces/background-multimodal-llm
 # Set environment variables
 ENV PATH="/home/$USERNAME/.local/bin:$PATH"
 ENV PYTHONPATH="/workspaces/background-multimodal-llm"
-ENV JUPYTER_ENABLE_LAB=yes
 ENV DEVELOPMENT_MODE=cloud
 
 # Pre-install core packages for multimodal AI assistant
@@ -118,24 +117,13 @@ RUN pip3 install --user --no-cache-dir \
     langchain-google-genai>=0.0.6 \
     # Environment and validation
     python-dotenv>=1.0.0 \
-    pydantic>=2.0.0 \
-    # Development tools
-    jupyter>=1.0.0 \
-    jupyterlab>=4.0.0
-
-# Set up Jupyter configuration
-RUN jupyter lab --generate-config && \
-    echo "c.ServerApp.ip = '0.0.0.0'" >> ~/.jupyter/jupyter_lab_config.py && \
-    echo "c.ServerApp.allow_root = True" >> ~/.jupyter/jupyter_lab_config.py && \
-    echo "c.ServerApp.open_browser = False" >> ~/.jupyter/jupyter_lab_config.py && \
-    echo "c.ServerApp.token = ''" >> ~/.jupyter/jupyter_lab_config.py && \
-    echo "c.ServerApp.password = ''" >> ~/.jupyter/jupyter_lab_config.py
+    pydantic>=2.0.0
 
 # Create directories for API keys and configuration
 RUN mkdir -p ~/.config
 
 # Expose ports for multimodal AI services (internal container ports)
-EXPOSE 3000 5173 8000 8888
+EXPOSE 3000 8000
 
 # Default command
 CMD ["sleep", "infinity"] 

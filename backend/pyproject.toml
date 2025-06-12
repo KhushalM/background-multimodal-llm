@@ -69,11 +69,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    # Jupyter Development
-    "jupyter>=1.0.0",
-    "jupyterlab>=4.0.0",
-    "ipywidgets>=8.1.0",
-    
     # Visualization
     "matplotlib>=3.7.0",
     "plotly>=5.17.0",
@@ -99,12 +94,11 @@ Homepage = "https://github.com/khushal/background-multimodal-llm"
 Repository = "https://github.com/khushal/background-multimodal-llm"
 
 [tool.black]
-line-length = 88
 target-version = ['py311']
 
 [tool.isort]
-profile = "black"
 multi_line_output = 3
+known_first_party = ["multimodal_ai_backend"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

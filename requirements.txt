@@ -8,9 +8,10 @@ torch>=2.1.0
 torchvision>=0.16.0
 torchaudio>=2.1.0
 
-# Primary Cloud Services (choose one or two)
+# Primary Cloud Services
 openai>=1.3.0  # OpenAI API client (GPT-4, Whisper, DALL-E)
 huggingface-hub>=0.19.0  # Hugging Face Hub API client
+google-generativeai>=0.3.0  # Google Gemini API
 # anthropic>=0.7.0  # Uncomment if using Claude
 # boto3>=1.34.0  # Uncomment if using AWS
 
@@ -18,6 +19,9 @@ huggingface-hub>=0.19.0  # Hugging Face Hub API client
 transformers>=4.35.0
 datasets>=2.14.0
 tokenizers>=0.15.0
+langchain>=0.1.0
+langchain-openai>=0.0.5
+langchain-google-genai>=0.0.6
 
 # FastAPI Backend
 fastapi>=0.104.0
@@ -29,26 +33,31 @@ httpx>=0.25.0
 # Audio Processing (WebRTC)
 pyaudio>=0.2.11
 pydub>=0.25.0
-librosa>=0.10.0
+librosa>=0.10.1
 soundfile>=0.12.0
+numba>=0.56.0
 
 # Data Processing
 numpy>=1.24.0
 pandas>=2.1.0
 Pillow>=10.0.0
+scipy>=1.11.0
 
-# Jupyter Development
-jupyter>=1.0.0
-jupyterlab>=4.0.0
-ipywidgets>=8.1.0
+# Validation and Configuration
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
 
 # Visualization
 matplotlib>=3.7.0
 plotly>=5.17.0
 streamlit>=1.28.0  # Quick prototyping
 
-# Code Quality
+# Code Quality and Environment
 black>=23.9.0
 isort>=5.12.0
 python-dotenv>=1.0.0
-requests>=2.31.0 
+requests>=2.31.0
+
+# Testing (optional)
+pytest>=7.0.0
+pytest-asyncio>=0.21.0 
