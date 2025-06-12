@@ -29,9 +29,9 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     pkg-config \
     ca-certificates \
-    # Node.js for React frontend
-    nodejs \
-    npm \
+    # Node.js for React frontend (will install newer version via NodeSource)
+    # nodejs \
+    # npm \
     # Python development tools
     python3-dev \
     python3-pip \
@@ -42,6 +42,11 @@ RUN apt-get update && apt-get install -y \
     # Sudo for user management
     sudo \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 18.x (LTS) from NodeSource repository
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install git-lfs for dataset management
 RUN git lfs install --system
