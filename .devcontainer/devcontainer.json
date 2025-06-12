@@ -13,12 +13,14 @@
                 "ms-python.black-formatter",
                 "ms-python.isort",
                 "ms-python.flake8",
-                // Frontend development (React)
+                // Frontend development (React + TypeScript + Vite)
+                "ms-vscode.vscode-typescript-next",
                 "bradlc.vscode-tailwindcss",
                 "esbenp.prettier-vscode",
                 "ms-vscode.live-server",
-                // Configuration files
                 "ms-vscode.vscode-json",
+                "chakra-ui.chakra-ui-snippets",
+                // Configuration files
                 "redhat.vscode-yaml",
                 // AI assistance
                 "github.copilot",
@@ -37,7 +39,20 @@
                 },
                 "terminal.integrated.defaultProfile.linux": "bash",
                 "python.analysis.typeCheckingMode": "basic",
-                "python.analysis.autoImportCompletions": true
+                "python.analysis.autoImportCompletions": true,
+                // TypeScript settings
+                "typescript.preferences.includePackageJsonAutoImports": "auto",
+                "typescript.suggest.autoImports": true,
+                "typescript.updateImportsOnFileMove.enabled": "always",
+                // Frontend development
+                "emmet.includeLanguages": {
+                    "typescript": "html",
+                    "typescriptreact": "html"
+                },
+                "editor.formatOnSave": true,
+                "editor.codeActionsOnSave": {
+                    "source.fixAll.eslint": "explicit"
+                }
             }
         }
     },
@@ -47,7 +62,7 @@
     ],
     "portsAttributes": {
         "3000": {
-            "label": "React Frontend (Create React App)",
+            "label": "Vite Frontend (React + TypeScript)",
             "onAutoForward": "openPreview"
         },
         "8000": {

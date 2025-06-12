@@ -28,7 +28,7 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN:-}
     ports:
-      - "3000:3000" # React frontend (Create React App)
+      - "3000:3000" # Vite frontend (React + TypeScript)
       - "8000:8000" # FastAPI backend
     platform: linux/amd64
 

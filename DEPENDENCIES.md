@@ -31,9 +31,10 @@ uv venv venv
 source venv/bin/activate
 uv pip install -e .
 
-# Option 3: Frontend setup
+# Option 3: Frontend setup (Vite + React + TypeScript)
 cd frontend
 npm install
+npm run dev  # Start development server
 ```
 
 ### **For detailed instructions, see:** 
@@ -44,4 +45,12 @@ npm install
 **Note:** 
 - **Root `requirements.txt`:** Use for simple, complete setup
 - **Backend `pyproject.toml`:** Use for development with optional dependencies
-- **Frontend:** Managed separately with npm/yarn 
+- **Frontend:** Vite + React + TypeScript setup - always run commands from `frontend/` directory
+
+**Important:** Frontend commands must be run from the `frontend/` directory:
+```bash
+cd frontend
+npm run dev    # Start development server
+npm run build  # Production build
+npm run lint   # Run linting
+``` 

@@ -118,30 +118,18 @@ FRONTEND_URL=http://localhost:3000
 BACKEND_URL=http://localhost:8000
 EOF
 
-# Simple React package.json
-cat > frontend/package.json << 'EOF'
-{
-  "name": "ai-assistant-frontend",
-  "version": "1.0.0",
-  "private": true,
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1"
-  },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build"
-  },
-  "proxy": "http://localhost:8000"
-}
-EOF
+# Note: Frontend package.json already exists with Vite configuration
+# No need to overwrite it
 
 # Install frontend dependencies if npm is available
 if command -v npm &> /dev/null; then
     print_info "Installing frontend dependencies..."
-    cd frontend && npm install && cd ..
-    print_status "Frontend dependencies installed"
+    if [ -f "frontend/package.json" ]; then
+        cd frontend && npm install && cd ..
+        print_status "Frontend dependencies installed"
+    else
+        print_warning "Frontend package.json not found - skipping npm install"
+    fi
 fi
 
 print_status "Setup complete!"
@@ -149,16 +137,21 @@ echo ""
 print_info "🚀 Quick Start:"
 echo "  1. Copy .env.example to .env and add your API keys"
 echo "  2. Start backend: python backend/main.py"
-echo "  3. Start frontend: cd frontend && npm start"
+echo "  3. Start frontend: cd frontend && npm run dev"
 echo "  4. Try Streamlit: streamlit run your_app.py"
 echo ""
 print_info "🌐 Access URLs:"
-echo "  Frontend (React): http://localhost:3000"
+echo "  Frontend (Vite): http://localhost:3000"
 echo "  Backend (FastAPI): http://localhost:8000"
 echo ""
-print_info "📂 Simple Structure:"
-echo "  frontend/: React app (Create React App)"
-echo "  backend/: FastAPI server"
+print_info "📂 Project Structure:"
+echo "  frontend/: React + TypeScript + Vite + Chakra UI"
+echo "  backend/: FastAPI server with multimodal AI"
 echo "  data/: Local data storage"
+echo ""
+print_info "💡 Development Tips:"
+echo "  • Frontend: Always run 'npm run dev' from frontend/ directory"
+echo "  • Backend: Run 'python main.py' from backend/ directory"
+echo "  • Use 'npm run build' to create production build"
 echo ""
 print_status "Ready to build your AI assistant! 🤖" 
