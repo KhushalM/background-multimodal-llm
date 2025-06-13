@@ -37,41 +37,48 @@ background-multimodal-llm/
 ### Frontend Setup
 
 1. Navigate to the frontend directory:
+
    ```bash
    cd frontend
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    ```
 
 3. Start the development server:
+
    ```bash
    npm run dev
    ```
 
-   The frontend will be available at `http://localhost:5173`
+   The frontend will be available at `http://localhost:3000`
 
 ### Backend Setup
 
 1. Navigate to the backend directory:
+
    ```bash
    cd backend
    ```
 
 2. Create a virtual environment (recommended):
+
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
 3. Install dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
 
 4. Start the WebSocket server:
+
    ```bash
    python main.py
    ```
@@ -110,7 +117,7 @@ The application establishes a WebSocket connection with the backend server to ha
 - **TypeScript**: Full type safety and better developer experience
 - **Vite**: Fast build tool and development server
 - **Chakra UI v3**: Modern, accessible component library
-- **Native Web APIs**: 
+- **Native Web APIs**:
   - `getUserMedia()` for microphone access
   - `getDisplayMedia()` for screen sharing
   - `WebSocket` for real-time communication
@@ -148,11 +155,13 @@ Make sure to grant these permissions when prompted by your browser.
 ### Running in Development Mode
 
 1. Start the backend server:
+
    ```bash
    cd backend && python main.py
    ```
 
 2. In a new terminal, start the frontend:
+
    ```bash
    cd frontend && npm run dev
    ```
@@ -162,6 +171,7 @@ Make sure to grant these permissions when prompted by your browser.
 ### Building for Production
 
 1. Build the frontend:
+
    ```bash
    cd frontend && npm run build
    ```
@@ -171,12 +181,14 @@ Make sure to grant these permissions when prompted by your browser.
 ## Current Status - Complete System! 🎉
 
 **Voice Conversation Pipeline with Screen Context**: ✅ **COMPLETED**
+
 - 🎤 **Speech-to-Text (STT)**: Real-time audio transcription using HuggingFace Whisper
-- 🧠 **Multimodal AI Brain with Screen Context**: Intelligent responses using Gemini + Vision + LangChain memory  
+- 🧠 **Multimodal AI Brain with Screen Context**: Intelligent responses using Gemini + Vision + LangChain memory
 - 🗣️ **Text-to-Speech (TTS)**: Natural speech synthesis using HuggingFace TTS models
 - 🖥️ **Screen Understanding**: Integrated visual context analysis using Gemini Vision
 
 **Complete Conversation Flow**:
+
 ```
 User speaks + Screen capture → Distil-Whisper STT + Screen Analysis → Gemini 2.0 Flash processes with visual context → SpeechT5 TTS → User hears contextual response
 ```
@@ -184,7 +196,7 @@ User speaks + Screen capture → Distil-Whisper STT + Screen Analysis → Gemini
 ### What's Working Now
 
 1. ✅ **Real-time Voice Assistant**: Speak to the AI and hear responses
-2. ✅ **Screen Context Awareness**: AI can see and understand your screen content  
+2. ✅ **Screen Context Awareness**: AI can see and understand your screen content
 3. ✅ **Conversation Memory**: AI remembers context across the session
 4. ✅ **WebSocket Integration**: All services connected through real-time WebSocket
 5. ✅ **Multi-user Support**: Separate sessions for concurrent users
@@ -205,7 +217,7 @@ GEMINI_API_KEY=your_gemini_key
 python main.py
 
 # Frontend setup (new terminal)
-cd frontend  
+cd frontend
 npm install
 npm run dev
 ```
@@ -235,15 +247,16 @@ Backend Services:
 ├── STT Service (Distil-Whisper v3.5)
 ├── Multimodal Service (Gemini 2.0 Flash + Vision + Memory)
 │   ├── Text Processing
-│   ├── Screen Analysis 
+│   ├── Screen Analysis
 │   ├── Context Integration
 │   └── Response Generation
 └── TTS Service (SpeechT5)
 ```
 
 **Key Integration Benefits:**
+
 - Single service handles both text and visual understanding
-- Unified context processing for better responses  
+- Unified context processing for better responses
 - Simplified architecture and maintenance
 - Reduced latency through integrated processing
 

@@ -55,8 +55,10 @@ print_status "Project structure created"
 # Create basic configuration files
 print_info "Creating configuration files..."
 
-# Simple FastAPI backend
-cat > backend/main.py << 'EOF'
+# Simple FastAPI backend (only if it doesn't exist)
+if [ ! -f "backend/main.py" ]; then
+    print_info "Creating initial backend/main.py..."
+    cat > backend/main.py << 'EOF'
 """
 Personal Multimodal AI Assistant Backend
 Simple FastAPI server with cloud AI integration
@@ -101,6 +103,10 @@ async def websocket_endpoint(websocket: WebSocket):
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 EOF
+    print_status "Created initial backend/main.py"
+else
+    print_info "backend/main.py already exists - skipping creation"
+fi
 
 # Simple environment template
 cat > .env.example << 'EOF'
