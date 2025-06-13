@@ -26,9 +26,9 @@ const App: React.FC = () => {
     isConnected: false,
   });
   const [statusMessage, setStatusMessage] = useState<string>("");
-  const [aiResponse, setAiResponse] = useState<string>("");
   const [isAiSpeaking, setIsAiSpeaking] = useState<boolean>(false);
   const [speechDetected, setSpeechDetected] = useState<boolean>(false);
+  const [aiResponse, setAiResponse] = useState<string>("");
   const [audioEnergy, setAudioEnergy] = useState<number>(0);
   const [currentTranscription, setCurrentTranscription] = useState<string>("");
   const [messages, setMessages] = useState<
@@ -44,44 +44,28 @@ const App: React.FC = () => {
       };
     }>
   >([]);
-  const [messageCounter, setMessageCounter] = useState<number>(0);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<
-    "connected" | "disconnected" | "error"
-  >("disconnected");
-  const [retryCount, setRetryCount] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const playbackAudioContextRef = useRef<AudioContext | null>(null);
+  const shouldKeepConnectionRef = useRef(false);
   const isConnectingRef = useRef(false);
-  const maxRetries = 3; // Maximum number of retry attempts
-  const maxFailures = 5; // Maximum number of total failures before giving up
-  const failureCountRef = useRef(0); // Track total failures
+  const maxRetries = 3;
+  const retryCountRef = useRef(0);
 
   // Voice Activity Detection
   const vad = useVoiceActivityDetection({
     minSpeechDuration: 100,
-    maxSilenceDuration: 2000,
-    energyThreshold: 0.005,
+    maxSilenceDuration: 5000,
+    energyThreshold: 0.008,
   });
 
   // WebSocket connection setup
   const connectWebSocket = useCallback(() => {
-    // Stop if we've exceeded maximum failures
-    if (failureCountRef.current >= maxFailures) {
-      setStatusMessage(
-        "Connection failed after multiple attempts. Please refresh the page to try again."
-      );
-      return;
-    }
-
-    // Prevent multiple simultaneous connection attempts
     if (
-      isConnectingRef.current ||
-      wsRef.current?.readyState === WebSocket.OPEN
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      isConnectingRef.current
     ) {
       return;
     }
@@ -99,17 +83,15 @@ const App: React.FC = () => {
         console.error("WebSocket connection timeout");
         ws.close();
         isConnectingRef.current = false;
-        failureCountRef.current += 1;
       }
     }, 10000);
 
     ws.onopen = () => {
       clearTimeout(connectionTimeout);
       isConnectingRef.current = false;
-      failureCountRef.current = 0; // Reset failure count on successful connection
+      retryCountRef.current = 0;
       setState((prev) => ({ ...prev, isConnected: true }));
       setStatusMessage("WebSocket connection established");
-      setRetryCount(0);
     };
 
     ws.onclose = (event) => {
@@ -118,14 +100,17 @@ const App: React.FC = () => {
       setState((prev) => ({ ...prev, isConnected: false }));
       setStatusMessage(`WebSocket connection lost (code: ${event.code})`);
 
-      // Only attempt to reconnect if the connection was not closed intentionally
-      if (event.code !== 1000 && retryCount < maxRetries) {
-        const nextRetry = retryCount + 1;
-        setRetryCount(nextRetry);
-        const delay = Math.min(1000 * Math.pow(2, nextRetry - 1), 10000);
+      // Only attempt to reconnect if we should keep the connection
+      if (
+        shouldKeepConnectionRef.current &&
+        retryCountRef.current < maxRetries
+      ) {
+        retryCountRef.current += 1;
+        const delay = Math.min(
+          1000 * Math.pow(2, retryCountRef.current - 1),
+          10000
+        );
         setTimeout(connectWebSocket, delay);
-      } else {
-        failureCountRef.current += 1;
       }
     };
 
@@ -135,12 +120,6 @@ const App: React.FC = () => {
         "Failed to connect to server - check console for details"
       );
       isConnectingRef.current = false;
-      failureCountRef.current += 1;
-
-      // Close the connection to trigger onclose handler which manages retries
-      if (ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
-      }
     };
 
     ws.onmessage = (event) => {
@@ -201,26 +180,85 @@ const App: React.FC = () => {
         ws.close(1000, "Component unmounting");
       }
     };
-  }, [
-    retryCount,
-    setState,
-    setStatusMessage,
-    setMessages,
-    setCurrentTranscription,
-    setAiResponse,
-  ]);
+  }, []);
 
-  // Connect to WebSocket when component mounts
-  useEffect(() => {
-    connectWebSocket();
+  // Screen sharing functionality
+  const toggleScreenShare = async () => {
+    try {
+      if (!state.isScreenSharing) {
+        // Start screen sharing
+        shouldKeepConnectionRef.current = true;
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          connectWebSocket();
+        }
 
-    // Cleanup on unmount
-    return () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.close(1000, "Component unmounting");
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+
+        mediaStreamRef.current = stream;
+
+        // Send screen data through WebSocket
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(
+            JSON.stringify({
+              type: "screen_share_start",
+              timestamp: Date.now(),
+            })
+          );
+        }
+
+        // Handle stream end (when user stops sharing)
+        stream.getVideoTracks()[0].addEventListener("ended", () => {
+          setState((prev) => ({ ...prev, isScreenSharing: false }));
+          setStatusMessage("Screen sharing stopped");
+
+          // Close WebSocket if voice assistant is also inactive
+          if (!state.isVoiceActive) {
+            shouldKeepConnectionRef.current = false;
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.close(1000, "Screen sharing stopped");
+            }
+          }
+        });
+
+        setState((prev) => ({ ...prev, isScreenSharing: true }));
+        setStatusMessage("Screen sharing started");
+      } else {
+        // Stop screen sharing
+        if (mediaStreamRef.current) {
+          mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+          mediaStreamRef.current = null;
+        }
+
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(
+            JSON.stringify({
+              type: "screen_share_stop",
+              timestamp: Date.now(),
+            })
+          );
+        }
+
+        setState((prev) => ({ ...prev, isScreenSharing: false }));
+        setStatusMessage("Screen sharing stopped");
+
+        // Close WebSocket if voice assistant is also inactive
+        if (!state.isVoiceActive) {
+          shouldKeepConnectionRef.current = false;
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.close(1000, "Screen sharing stopped");
+          }
+        }
       }
-    };
-  }, [connectWebSocket]); // Only re-run if connectWebSocket changes
+    } catch (error) {
+      console.error("Screen sharing error:", error);
+      setStatusMessage(
+        "Screen sharing failed - Unable to access screen sharing"
+      );
+    }
+  };
 
   // Audio playback functionality
   const playAudioResponse = async (audioData: any) => {
@@ -273,68 +311,16 @@ const App: React.FC = () => {
     }
   };
 
-  // Screen sharing functionality
-  const toggleScreenShare = async () => {
-    try {
-      if (!state.isScreenSharing) {
-        // Start screen sharing
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: true,
-        });
-
-        mediaStreamRef.current = stream;
-
-        // Send screen data through WebSocket
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(
-            JSON.stringify({
-              type: "screen_share_start",
-              timestamp: Date.now(),
-            })
-          );
-        }
-
-        // Handle stream end (when user stops sharing)
-        stream.getVideoTracks()[0].addEventListener("ended", () => {
-          setState((prev) => ({ ...prev, isScreenSharing: false }));
-          setStatusMessage("Screen sharing stopped");
-        });
-
-        setState((prev) => ({ ...prev, isScreenSharing: true }));
-        setStatusMessage("Screen sharing started");
-      } else {
-        // Stop screen sharing
-        if (mediaStreamRef.current) {
-          mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-          mediaStreamRef.current = null;
-        }
-
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(
-            JSON.stringify({
-              type: "screen_share_stop",
-              timestamp: Date.now(),
-            })
-          );
-        }
-
-        setState((prev) => ({ ...prev, isScreenSharing: false }));
-        setStatusMessage("Screen sharing stopped");
-      }
-    } catch (error) {
-      console.error("Screen sharing error:", error);
-      setStatusMessage(
-        "Screen sharing failed - Unable to access screen sharing"
-      );
-    }
-  };
-
   // Voice assistant functionality
   const toggleVoiceAssistant = async () => {
     try {
       if (!state.isVoiceActive) {
         // Start voice assistant
+        shouldKeepConnectionRef.current = true;
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          connectWebSocket();
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
@@ -385,7 +371,7 @@ const App: React.FC = () => {
         source.connect(processor);
         processor.connect(audioContextRef.current.destination);
 
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(
             JSON.stringify({
               type: "voice_assistant_start",
@@ -408,7 +394,7 @@ const App: React.FC = () => {
           audioContextRef.current = null;
         }
 
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(
             JSON.stringify({
               type: "voice_assistant_stop",
@@ -422,12 +408,36 @@ const App: React.FC = () => {
         setAudioEnergy(0);
         vad.reset();
         setStatusMessage("Voice assistant deactivated");
+
+        // Close WebSocket if screen sharing is also inactive
+        if (!state.isScreenSharing) {
+          shouldKeepConnectionRef.current = false;
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.close(1000, "Voice assistant stopped");
+          }
+        }
       }
     } catch (error) {
       console.error("Voice assistant error:", error);
       setStatusMessage("Voice assistant failed - Unable to access microphone");
     }
   };
+
+  // Cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      shouldKeepConnectionRef.current = false;
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.close(1000, "Component unmounting");
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
 
   return (
     <Container maxW="4xl" h="100vh">
@@ -522,7 +532,7 @@ const App: React.FC = () => {
               transition="all 0.2s"
               minW="200px"
             >
-              {state.isVoiceActive ? "�� Stop Voice" : "🎙️ Voice Assistant"}
+              {state.isVoiceActive ? "🛑 Stop Voice" : "🎙️ Voice Assistant"}
             </Button>
           </HStack>
 
