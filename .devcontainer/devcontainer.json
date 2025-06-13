@@ -63,7 +63,7 @@
     "portsAttributes": {
         "3000": {
             "label": "Vite Frontend (React + TypeScript)",
-            "onAutoForward": "openPreview"
+            "onAutoForward": "openBrowser"
         },
         "8000": {
             "label": "FastAPI Backend (Multimodal AI)",

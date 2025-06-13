@@ -5,10 +5,10 @@ import logging
 import numpy as np
 import time
 from typing import Optional, Union, List, AsyncGenerator
-import httpx
 import json
-import base64
 from dataclasses import dataclass
+import torch
+from transformers import pipeline, AutoProcessor, AutoModelForSpeechSeq2Seq
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +18,12 @@ class STTConfig:
     """Configuration for Speech-to-Text service"""
 
     model_name: str = "distil-whisper/distil-large-v3.5"
-    hf_token: Optional[str] = None
+    device: str = "auto"  # "auto", "cpu", or "cuda"
+    torch_dtype: str = "auto"  # "auto", "float16", "float32"
     sample_rate: int = 16000
     chunk_duration: float = 2.0  # seconds
     max_retries: int = 3
-    timeout: float = 30.0
+    use_flash_attention_2: bool = False  # Set to True if supported
 
 
 class AudioChunk(BaseModel):
@@ -45,30 +46,91 @@ class TranscriptionResult(BaseModel):
 
 
 class STTService:
-    """Speech-to-Text service using HuggingFace Inference API"""
+    """Speech-to-Text service using HuggingFace Transformers pipeline"""
 
     def __init__(self, config: STTConfig):
         self.config = config
-        self.client = httpx.AsyncClient(timeout=config.timeout)
-        self.api_url = (
-            f"https://api-inference.huggingface.co/models/{config.model_name}"
-        )
-        self.headers = {
-            "Authorization": f"Bearer {config.hf_token}",
-            "Content-Type": "application/json",
-        }
+        self.pipeline = None
+        self.device = self._get_device()
+        self.torch_dtype = self._get_torch_dtype()
 
         # Audio buffer for accumulating chunks
         self.audio_buffer = []
         self.buffer_duration = 0.0
 
+        logger.info(f"STT service initialized with device: {self.device}, dtype: {self.torch_dtype}")
+
+    def _get_device(self) -> str:
+        """Determine the best device to use"""
+        if self.config.device == "auto":
+            if torch.cuda.is_available():
+                return "cuda"
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                return "mps"  # Apple Silicon GPU
+            else:
+                return "cpu"
+        return self.config.device
+
+    def _get_torch_dtype(self):
+        """Determine the best torch dtype to use"""
+        if self.config.torch_dtype == "auto":
+            if self.device == "cuda":
+                return torch.float16
+            else:
+                return torch.float32
+        elif self.config.torch_dtype == "float16":
+            return torch.float16
+        else:
+            return torch.float32
+
     async def __aenter__(self):
+        """Initialize the pipeline asynchronously"""
+        try:
+            logger.info(f"Loading STT model: {self.config.model_name}")
+            
+            # Load model and processor
+            model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                self.config.model_name,
+                torch_dtype=self.torch_dtype,
+                low_cpu_mem_usage=True,
+                use_safetensors=True,
+                attn_implementation="flash_attention_2" if self.config.use_flash_attention_2 else None
+            )
+            model.to(self.device)
+
+            processor = AutoProcessor.from_pretrained(self.config.model_name)
+
+            # Create pipeline
+            self.pipeline = pipeline(
+                "automatic-speech-recognition",
+                model=model,
+                tokenizer=processor.tokenizer,
+                feature_extractor=processor.feature_extractor,
+                max_new_tokens=128,
+                chunk_length_s=30,
+                batch_size=16,
+                return_timestamps=True,
+                torch_dtype=self.torch_dtype,
+                device=self.device,
+            )
+
+            logger.info("STT pipeline loaded successfully")
+            
+        except Exception as e:
+            logger.error(f"Error loading STT pipeline: {e}")
+            raise
+            
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.client.aclose()
+        """Cleanup resources"""
+        if self.pipeline is not None:
+            # Clear CUDA cache if using GPU
+            if self.device == "cuda":
+                torch.cuda.empty_cache()
+            self.pipeline = None
 
-    def _preprocess_audio(self, audio_data: List[float], sample_rate: int) -> bytes:
+    def _preprocess_audio(self, audio_data: List[float], sample_rate: int) -> np.ndarray:
         """Convert audio data to the format expected by Whisper"""
         try:
             # Convert to numpy array
@@ -89,10 +151,7 @@ class STTService:
             if np.max(np.abs(audio_array)) > 0:
                 audio_array = audio_array / np.max(np.abs(audio_array))
 
-            # Convert to 16-bit PCM
-            audio_int16 = (audio_array * 32767).astype(np.int16)
-
-            return audio_int16.tobytes()
+            return audio_array
 
         except Exception as e:
             logger.error(f"Error preprocessing audio: {e}")
@@ -103,72 +162,54 @@ class STTService:
         start_time = time.time()
 
         try:
+            if self.pipeline is None:
+                raise RuntimeError("STT pipeline not initialized. Use 'async with' context manager.")
+
             # Preprocess audio
-            audio_bytes = self._preprocess_audio(
+            audio_array = self._preprocess_audio(
                 audio_chunk.data, audio_chunk.sample_rate
             )
 
-            # Encode audio as base64 for API
-            audio_b64 = base64.b64encode(audio_bytes).decode()
+            # Run inference with pipeline
+            # Run in executor to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, 
+                lambda: self.pipeline(
+                    audio_array,
+                    generate_kwargs={"language": "english"},
+                    return_timestamps=True
+                )
+            )
 
-            # Prepare payload
-            payload = {
-                "inputs": audio_b64,
-                "parameters": {
-                    "return_timestamps": True,
-                    "language": "en",  # Can be made configurable
-                },
-            }
+            # Extract text from result
+            text = ""
+            if isinstance(result, dict):
+                text = result.get("text", "").strip()
+            elif isinstance(result, list) and len(result) > 0:
+                text = result[0].get("text", "").strip()
 
-            # Make API request with retries
-            for attempt in range(self.config.max_retries):
-                try:
-                    response = await self.client.post(
-                        self.api_url, headers=self.headers, json=payload
-                    )
+            processing_time = time.time() - start_time
 
-                    if response.status_code == 200:
-                        result = response.json()
-                        text = result.get("text", "").strip()
+            logger.debug(f"Transcribed audio chunk: '{text}' in {processing_time:.2f}s")
 
-                        processing_time = time.time() - start_time
-
-                        return TranscriptionResult(
-                            text=text,
-                            timestamp=audio_chunk.timestamp,
-                            chunk_id=audio_chunk.chunk_id,
-                            processing_time=processing_time,
-                        )
-
-                    elif response.status_code == 503:
-                        # Model loading, wait and retry
-                        wait_time = 2**attempt
-                        logger.warning(f"Model loading, waiting {wait_time}s...")
-                        await asyncio.sleep(wait_time)
-                        continue
-
-                    else:
-                        logger.error(
-                            f"STT API error: {response.status_code} - {response.text}"
-                        )
-                        break
-
-                except httpx.TimeoutException:
-                    logger.warning(f"STT request timeout, attempt {attempt + 1}")
-                    if attempt == self.config.max_retries - 1:
-                        raise
-                    await asyncio.sleep(1)
+            return TranscriptionResult(
+                text=text,
+                timestamp=audio_chunk.timestamp,
+                chunk_id=audio_chunk.chunk_id,
+                processing_time=processing_time,
+            )
 
         except Exception as e:
             logger.error(f"Error in transcribe_chunk: {e}")
 
-        # Return empty result on failure
-        return TranscriptionResult(
-            text="",
-            timestamp=audio_chunk.timestamp,
-            chunk_id=audio_chunk.chunk_id,
-            processing_time=time.time() - start_time,
-        )
+            # Return empty result on failure
+            return TranscriptionResult(
+                text="",
+                timestamp=audio_chunk.timestamp,
+                chunk_id=audio_chunk.chunk_id,
+                processing_time=time.time() - start_time,
+            )
 
     def add_audio_to_buffer(
         self, audio_data: List[float], sample_rate: int
@@ -230,8 +271,8 @@ class STTService:
 
 # Factory function for easy instantiation
 async def create_stt_service(
-    hf_token: str, model_name: str = "distil-whisper/distil-large-v3.5"
+    model_name: str = "distil-whisper/distil-large-v3.5", **config_kwargs
 ) -> STTService:
     """Create and initialize STT service"""
-    config = STTConfig(model_name=model_name, hf_token=hf_token)
+    config = STTConfig(model_name=model_name, **config_kwargs)
     return STTService(config)

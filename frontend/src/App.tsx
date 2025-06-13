@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Box,
   Button,
@@ -45,6 +45,12 @@ const App: React.FC = () => {
     }>
   >([]);
   const [messageCounter, setMessageCounter] = useState<number>(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connected" | "disconnected" | "error"
+  >("disconnected");
+  const [retryCount, setRetryCount] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -54,96 +60,131 @@ const App: React.FC = () => {
   // Voice Activity Detection
   const vad = useVoiceActivityDetection({
     minSpeechDuration: 200,
-    maxSilenceDuration: 800,
+    maxSilenceDuration: 1800,
     energyThreshold: 0.008,
   });
 
   // WebSocket connection setup
-  useEffect(() => {
-    const connectWebSocket = () => {
-      try {
-        // Replace with your actual WebSocket URL
-        wsRef.current = new WebSocket("ws://localhost:8000/ws");
+  const connectWebSocket = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log("WebSocket already connected");
+      return;
+    }
 
-        wsRef.current.onopen = () => {
-          setState((prev) => ({ ...prev, isConnected: true }));
-          setStatusMessage("WebSocket connection established");
-        };
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.hostname}:8000/ws`;
+    console.log("Attempting to connect to WebSocket at:", wsUrl);
 
-        wsRef.current.onclose = () => {
-          setState((prev) => ({ ...prev, isConnected: false }));
-          setStatusMessage("WebSocket connection lost");
-        };
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
 
-        wsRef.current.onerror = (error) => {
-          console.error("WebSocket error:", error);
-          setStatusMessage("Failed to connect to server");
-        };
+    // Set a longer connection timeout
+    const connectionTimeout = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.error("WebSocket connection timeout");
+        ws.close();
+      }
+    }, 10000); // Increased to 10 seconds
 
-        wsRef.current.onmessage = async (event) => {
-          // Handle incoming messages from server
-          const data = JSON.parse(event.data);
-          console.log("Received:", data);
+    ws.onopen = () => {
+      console.log("WebSocket connected");
+      clearTimeout(connectionTimeout);
+      setState((prev) => ({ ...prev, isConnected: true }));
+      setStatusMessage("WebSocket connection established");
+      setRetryCount(0); // Reset retry count on successful connection
+    };
 
-          if (data.type === "transcription_result") {
-            setStatusMessage(`Transcribed: "${data.text}"`);
-            // Add user message
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `msg_${messageCounter}_user`,
-                type: "user",
-                text: data.text,
-                timestamp: Date.now(),
-                metadata: {
-                  confidence: data.confidence,
-                  processing_time: data.processing_time,
-                },
-              },
-            ]);
-            setMessageCounter((prev) => prev + 1);
-            setCurrentTranscription("");
-          } else if (data.type === "ai_response") {
-            setAiResponse(data.text);
-            setStatusMessage(`AI: "${data.text}"`);
-            // Add AI message
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `msg_${messageCounter}_ai`,
-                type: "ai",
-                text: data.text,
-                timestamp: Date.now(),
-                metadata: {
-                  processing_time: data.processing_time,
-                },
-              },
-            ]);
-            setMessageCounter((prev) => prev + 1);
-          } else if (data.type === "audio_response") {
-            // Auto-play TTS audio response
-            await playAudioResponse(data);
-          } else if (data.type === "partial_transcription") {
-            // Update live transcription
-            setCurrentTranscription(data.text);
-          } else if (data.type === "error") {
-            setStatusMessage(`Error: ${data.message}`);
-          }
-        };
-      } catch (error) {
-        console.error("WebSocket connection error:", error);
-        setStatusMessage("WebSocket connection error");
+    ws.onclose = (event) => {
+      console.log("WebSocket closed:", event.code, event.reason);
+      setState((prev) => ({ ...prev, isConnected: false }));
+      setStatusMessage("WebSocket connection lost");
+      clearTimeout(connectionTimeout);
+
+      // Only attempt to reconnect if the connection was not closed intentionally
+      if (event.code !== 1000) {
+        const nextRetry = Math.min(retryCount + 1, 3);
+        setRetryCount(nextRetry);
+        if (nextRetry <= 3) {
+          const delay = Math.min(1000 * Math.pow(2, nextRetry - 1), 10000);
+          console.log(
+            `Attempting to reconnect in ${delay}ms (attempt ${nextRetry}/3)`
+          );
+          setTimeout(connectWebSocket, delay);
+        }
       }
     };
 
-    connectWebSocket();
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      setStatusMessage("Failed to connect to server");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("Received message:", data);
+
+        if (data.type === "transcription_result") {
+          setStatusMessage(`Transcribed: "${data.text}"`);
+          // Add user message
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg_${Date.now()}_user`,
+              type: "user",
+              text: data.text,
+              timestamp: Date.now(),
+              metadata: {
+                confidence: data.confidence,
+                processing_time: data.processing_time,
+              },
+            },
+          ]);
+          setCurrentTranscription("");
+        } else if (data.type === "ai_response") {
+          setAiResponse(data.text);
+          setStatusMessage(`AI: "${data.text}"`);
+          // Add AI message
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg_${Date.now()}_ai`,
+              type: "ai",
+              text: data.text,
+              timestamp: Date.now(),
+              metadata: {
+                processing_time: data.processing_time,
+              },
+            },
+          ]);
+        } else if (data.type === "audio_response") {
+          // Auto-play TTS audio response
+          playAudioResponse(data);
+        } else if (data.type === "partial_transcription") {
+          // Update live transcription
+          setCurrentTranscription(data.text);
+        } else if (data.type === "error") {
+          setStatusMessage(`Error: ${data.message}`);
+        }
+      } catch (error) {
+        console.error("Error processing message:", error);
+      }
+    };
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+      clearTimeout(connectionTimeout);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close(1000, "Component unmounting");
       }
     };
-  }, []);
+  }, [
+    retryCount,
+    setState,
+    setStatusMessage,
+    setMessages,
+    setCurrentTranscription,
+    setAiResponse,
+  ]);
 
   // Audio playback functionality
   const playAudioResponse = async (audioData: any) => {

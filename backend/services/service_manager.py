@@ -20,25 +20,21 @@ class ServiceManager:
         self.multimodal_service: Optional[MultimodalService] = None
         self.tts_service: Optional[TTSService] = None
         
-        # API tokens from environment
-        self.hf_token = os.getenv("HUGGINGFACE_API_TOKEN")
+        # API tokens from environment (only Gemini is needed now)
         self.gemini_token = os.getenv("GEMINI_API_KEY")
         
     async def initialize_services(self):
         """Initialize all AI services"""
         try:
-            # Initialize STT service
-            if self.hf_token:
-                logger.info("Initializing STT service...")
-                self.stt_service = await create_stt_service(
-                    hf_token=self.hf_token,
-                    model_name="distil-whisper/distil-large-v3.5"
-                )
-                logger.info("STT service initialized successfully")
-            else:
-                logger.warning("No HuggingFace token found, STT service not available")
+            # Initialize STT service (now uses local pipeline, no token needed)
+            logger.info("Initializing STT service with local pipeline...")
+            self.stt_service = await create_stt_service(
+                model_name="distil-whisper/distil-large-v3.5"
+            )
+            await self.stt_service.__aenter__()  # Initialize the pipeline
+            logger.info("STT service initialized successfully")
                 
-            # Initialize Multimodal service (now includes screen context)
+            # Initialize Multimodal service (still needs API key)
             if self.gemini_token:
                 logger.info("Initializing Multimodal service with screen context...")
                 self.multimodal_service = await create_multimodal_service(
@@ -49,16 +45,13 @@ class ServiceManager:
             else:
                 logger.warning("No Gemini API key found, Multimodal service not available")
                 
-            # Initialize TTS service
-            if self.hf_token:
-                logger.info("Initializing TTS service...")
-                self.tts_service = await create_tts_service(
-                    hf_token=self.hf_token,
-                    model_name="microsoft/speecht5_tts"
-                )
-                logger.info("TTS service initialized successfully")
-            else:
-                logger.warning("No HuggingFace token found, TTS service not available")
+            # Initialize TTS service (now uses local pipeline, no token needed)
+            logger.info("Initializing TTS service with local pipeline...")
+            self.tts_service = await create_tts_service(
+                model_name="microsoft/speecht5_tts"
+            )
+            await self.tts_service.__aenter__()  # Initialize the pipeline
+            logger.info("TTS service initialized successfully")
             
         except Exception as e:
             logger.error(f"Error initializing services: {e}")

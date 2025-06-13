@@ -19,6 +19,7 @@ background-multimodal-llm/
 - **🔧 `backend/requirements.txt`:** Backend-specific dependencies (compatibility)
 - **⚙️ `backend/pyproject.toml`:** Modern Python project configuration with optional dependencies
 - **🌐 `frontend/package.json`:** React frontend dependencies (npm)
+4440
 
 ### **Quick Setup:**
 ```bash

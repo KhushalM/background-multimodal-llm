@@ -49,13 +49,12 @@ async def shutdown_event():
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ],  # Vite default port
+    allow_origins=["*"],  # Allow all origins in development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 
@@ -63,30 +62,59 @@ app.add_middleware(
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+        self.connection_attempts: Dict[WebSocket, int] = {}
 
     async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-        logger.info(
-            f"Client connected. Total connections: {len(self.active_connections)}"
-        )
+        try:
+            await websocket.accept()
+            self.active_connections.append(websocket)
+            self.connection_attempts[websocket] = 0
+            logger.info(
+                f"Client connected. Total connections: {len(self.active_connections)}"
+            )
+        except Exception as e:
+            logger.error(f"Error accepting WebSocket connection: {e}")
+            raise
 
     def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-        logger.info(
-            f"Client disconnected. Total connections: {len(self.active_connections)}"
-        )
+        try:
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+            if websocket in self.connection_attempts:
+                del self.connection_attempts[websocket]
+            logger.info(
+                f"Client disconnected. Total connections: {len(self.active_connections)}"
+            )
+        except Exception as e:
+            logger.error(f"Error disconnecting WebSocket: {e}")
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
+        try:
+            if websocket in self.active_connections:
+                await websocket.send_text(message)
+        except Exception as e:
+            logger.error(f"Error sending message: {e}")
+            # Only disconnect if we've had multiple failures
+            self.connection_attempts[websocket] = (
+                self.connection_attempts.get(websocket, 0) + 1
+            )
+            if self.connection_attempts[websocket] >= 3:
+                logger.warning(f"Too many send failures, disconnecting client")
+                self.disconnect(websocket)
 
     async def broadcast(self, message: str):
-        for connection in self.active_connections:
+        for connection in self.active_connections[:]:  # Create a copy of the list
             try:
                 await connection.send_text(message)
             except Exception as e:
                 logger.error(f"Error broadcasting message: {e}")
+                # Only disconnect if we've had multiple failures
+                self.connection_attempts[connection] = (
+                    self.connection_attempts.get(connection, 0) + 1
+                )
+                if self.connection_attempts[connection] >= 3:
+                    logger.warning(f"Too many broadcast failures, disconnecting client")
+                    self.disconnect(connection)
 
 
 manager = ConnectionManager()
