@@ -56,67 +56,91 @@ const App: React.FC = () => {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const playbackAudioContextRef = useRef<AudioContext | null>(null);
+  const isConnectingRef = useRef(false);
+  const maxRetries = 3; // Maximum number of retry attempts
+  const maxFailures = 5; // Maximum number of total failures before giving up
+  const failureCountRef = useRef(0); // Track total failures
 
   // Voice Activity Detection
   const vad = useVoiceActivityDetection({
-    minSpeechDuration: 200,
-    maxSilenceDuration: 1800,
-    energyThreshold: 0.008,
+    minSpeechDuration: 100,
+    maxSilenceDuration: 2000,
+    energyThreshold: 0.005,
   });
 
   // WebSocket connection setup
   const connectWebSocket = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      console.log("WebSocket already connected");
+    // Stop if we've exceeded maximum failures
+    if (failureCountRef.current >= maxFailures) {
+      setStatusMessage(
+        "Connection failed after multiple attempts. Please refresh the page to try again."
+      );
       return;
     }
 
+    // Prevent multiple simultaneous connection attempts
+    if (
+      isConnectingRef.current ||
+      wsRef.current?.readyState === WebSocket.OPEN
+    ) {
+      return;
+    }
+
+    isConnectingRef.current = true;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.hostname}:8000/ws`;
-    console.log("Attempting to connect to WebSocket at:", wsUrl);
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    // Set a longer connection timeout
+    // Set a connection timeout
     const connectionTimeout = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
         console.error("WebSocket connection timeout");
         ws.close();
+        isConnectingRef.current = false;
+        failureCountRef.current += 1;
       }
-    }, 10000); // Increased to 10 seconds
+    }, 10000);
 
     ws.onopen = () => {
-      console.log("WebSocket connected");
       clearTimeout(connectionTimeout);
+      isConnectingRef.current = false;
+      failureCountRef.current = 0; // Reset failure count on successful connection
       setState((prev) => ({ ...prev, isConnected: true }));
       setStatusMessage("WebSocket connection established");
-      setRetryCount(0); // Reset retry count on successful connection
+      setRetryCount(0);
     };
 
     ws.onclose = (event) => {
-      console.log("WebSocket closed:", event.code, event.reason);
-      setState((prev) => ({ ...prev, isConnected: false }));
-      setStatusMessage("WebSocket connection lost");
       clearTimeout(connectionTimeout);
+      isConnectingRef.current = false;
+      setState((prev) => ({ ...prev, isConnected: false }));
+      setStatusMessage(`WebSocket connection lost (code: ${event.code})`);
 
       // Only attempt to reconnect if the connection was not closed intentionally
-      if (event.code !== 1000) {
-        const nextRetry = Math.min(retryCount + 1, 3);
+      if (event.code !== 1000 && retryCount < maxRetries) {
+        const nextRetry = retryCount + 1;
         setRetryCount(nextRetry);
-        if (nextRetry <= 3) {
-          const delay = Math.min(1000 * Math.pow(2, nextRetry - 1), 10000);
-          console.log(
-            `Attempting to reconnect in ${delay}ms (attempt ${nextRetry}/3)`
-          );
-          setTimeout(connectWebSocket, delay);
-        }
+        const delay = Math.min(1000 * Math.pow(2, nextRetry - 1), 10000);
+        setTimeout(connectWebSocket, delay);
+      } else {
+        failureCountRef.current += 1;
       }
     };
 
     ws.onerror = (error) => {
       console.error("WebSocket error:", error);
-      setStatusMessage("Failed to connect to server");
+      setStatusMessage(
+        "Failed to connect to server - check console for details"
+      );
+      isConnectingRef.current = false;
+      failureCountRef.current += 1;
+
+      // Close the connection to trigger onclose handler which manages retries
+      if (ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
     };
 
     ws.onmessage = (event) => {
@@ -185,6 +209,18 @@ const App: React.FC = () => {
     setCurrentTranscription,
     setAiResponse,
   ]);
+
+  // Connect to WebSocket when component mounts
+  useEffect(() => {
+    connectWebSocket();
+
+    // Cleanup on unmount
+    return () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.close(1000, "Component unmounting");
+      }
+    };
+  }, [connectWebSocket]); // Only re-run if connectWebSocket changes
 
   // Audio playback functionality
   const playAudioResponse = async (audioData: any) => {
@@ -486,7 +522,7 @@ const App: React.FC = () => {
               transition="all 0.2s"
               minW="200px"
             >
-              {state.isVoiceActive ? "🔇 Stop Voice" : "🎙️ Voice Assistant"}
+              {state.isVoiceActive ? "�� Stop Voice" : "🎙️ Voice Assistant"}
             </Button>
           </HStack>
 

@@ -21,7 +21,11 @@ from models.multimodal import ConversationInput, ConversationResponse
 from models.TTS import TTSRequest, TTSResponse
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
 # FastAPI app instance
@@ -49,12 +53,20 @@ async def shutdown_event():
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins in development
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],  # Frontend origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,
+)
+
+# Log CORS configuration
+logger.info(
+    "CORS middleware configured with allow_origins=['http://localhost:3000', 'http://127.0.0.1:3000']"
 )
 
 
@@ -63,17 +75,21 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self.connection_attempts: Dict[WebSocket, int] = {}
+        logger.info("ConnectionManager initialized")
 
     async def connect(self, websocket: WebSocket):
         try:
+            logger.info(
+                f"Attempting to accept WebSocket connection from {websocket.client.host}"
+            )
             await websocket.accept()
             self.active_connections.append(websocket)
             self.connection_attempts[websocket] = 0
             logger.info(
-                f"Client connected. Total connections: {len(self.active_connections)}"
+                f"WebSocket connection accepted from {websocket.client.host}. Total connections: {len(self.active_connections)}"
             )
         except Exception as e:
-            logger.error(f"Error accepting WebSocket connection: {e}")
+            logger.error(f"Failed to accept WebSocket connection: {str(e)}")
             raise
 
     def disconnect(self, websocket: WebSocket):
@@ -170,7 +186,13 @@ async def optimize_performance():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for handling screen sharing and voice assistant data."""
-    await manager.connect(websocket)
+    logger.info("WebSocket connection attempt received at /ws endpoint")
+    try:
+        await manager.connect(websocket)
+        logger.info("WebSocket connection established successfully")
+    except Exception as e:
+        logger.error(f"Failed to establish WebSocket connection: {str(e)}")
+        return
 
     try:
         while True:
@@ -183,26 +205,33 @@ async def websocket_endpoint(websocket: WebSocket):
                 message_type = message.get("type")
                 timestamp = message.get("timestamp", datetime.now().timestamp())
 
-                logger.info(f"Received message type: {message_type}")
+                logger.info(
+                    f"Processing WebSocket message - Type: {message_type}, Timestamp: {timestamp}"
+                )
 
                 # Handle different message types
                 if message_type == "screen_share_start":
+                    logger.info("Handling screen share start request")
                     await handle_screen_share_start(websocket, message)
 
                 elif message_type == "screen_share_stop":
+                    logger.info("Handling screen share stop request")
                     await handle_screen_share_stop(websocket, message)
 
                 elif message_type == "voice_assistant_start":
+                    logger.info("Handling voice assistant start request")
                     await handle_voice_assistant_start(websocket, message)
 
                 elif message_type == "voice_assistant_stop":
+                    logger.info("Handling voice assistant stop request")
                     await handle_voice_assistant_stop(websocket, message)
 
                 elif message_type == "audio_data":
+                    logger.info("Handling audio data request")
                     await handle_audio_data(websocket, message)
 
                 else:
-                    logger.warning(f"Unknown message type: {message_type}")
+                    logger.warning(f"Unknown message type received: {message_type}")
                     await manager.send_personal_message(
                         json.dumps(
                             {
@@ -215,7 +244,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
 
             except json.JSONDecodeError as e:
-                logger.error(f"Invalid JSON received: {e}")
+                logger.error(f"Failed to parse WebSocket message as JSON: {e}")
                 await manager.send_personal_message(
                     json.dumps(
                         {
@@ -228,8 +257,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
 
     except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected")
         manager.disconnect(websocket)
-        logger.info("Client disconnected")
+    except Exception as e:
+        logger.error(f"Unexpected error in WebSocket handler: {e}")
+        manager.disconnect(websocket)
 
 
 async def handle_screen_share_start(websocket: WebSocket, message: Dict[str, Any]):
@@ -482,4 +514,11 @@ async def process_with_tts(websocket: WebSocket, text: str, session_id: str):
 
 if __name__ == "__main__":
     # Run the server
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="debug",
+        access_log=True,
+    )
