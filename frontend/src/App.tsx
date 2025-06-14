@@ -52,13 +52,15 @@ const App: React.FC = () => {
   const shouldKeepConnectionRef = useRef(false);
   const isConnectingRef = useRef(false);
   const heartbeatIntervalRef = useRef<number | null>(null);
+  const lastSilenceNotificationRef = useRef<number>(0);
   const maxRetries = 3;
   const retryCountRef = useRef(0);
 
   // Voice Activity Detection
   const vad = useVoiceActivityDetection({
-    minSpeechDuration: 100,
-    maxSilenceDuration: 5000,
+    minSpeechDuration: 300,
+    maxSilenceDuration: 2000,
+    maxSpeechDuration: 30000,
     energyThreshold: 0.008,
   });
 
@@ -185,6 +187,9 @@ const App: React.FC = () => {
         } else if (data.type === "partial_transcription") {
           // Update live transcription
           setCurrentTranscription(data.text);
+        } else if (data.type === "speech_active") {
+          // Speech is being accumulated
+          setStatusMessage("🎤 Listening... (speech detected)");
         } else if (data.type === "error") {
           setStatusMessage(`Error: ${data.message}`);
         }
@@ -383,25 +388,43 @@ const App: React.FC = () => {
             setSpeechDetected(vadResult.isSpeaking);
             setAudioEnergy(vadResult.energy);
 
-            // Only send audio when speech is detected (reduces bandwidth)
-            if (
-              vadResult.isSpeaking &&
-              wsRef.current &&
-              wsRef.current.readyState === WebSocket.OPEN
-            ) {
-              wsRef.current.send(
-                JSON.stringify({
-                  type: "audio_data",
-                  data: audioData,
-                  sample_rate: audioContextRef.current?.sampleRate || 16000,
-                  timestamp: Date.now(),
-                  vad: {
-                    isSpeaking: vadResult.isSpeaking,
-                    energy: vadResult.energy,
-                    confidence: vadResult.confidence,
-                  },
-                })
-              );
+            // Smart audio sending: only send when speaking or VAD state changes
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              const currentTime = Date.now();
+
+              // Always send audio when speaking
+              if (vadResult.isSpeaking) {
+                wsRef.current.send(
+                  JSON.stringify({
+                    type: "audio_data",
+                    data: audioData,
+                    sample_rate: audioContextRef.current?.sampleRate || 16000,
+                    timestamp: currentTime,
+                    vad: {
+                      isSpeaking: vadResult.isSpeaking,
+                      energy: vadResult.energy,
+                      confidence: vadResult.confidence,
+                    },
+                  })
+                );
+              } else {
+                // Send silence notification periodically (every 500ms) to end sessions
+                const lastSilenceTime = lastSilenceNotificationRef.current;
+                if (currentTime - lastSilenceTime > 500) {
+                  wsRef.current.send(
+                    JSON.stringify({
+                      type: "vad_state",
+                      timestamp: currentTime,
+                      vad: {
+                        isSpeaking: false,
+                        energy: vadResult.energy,
+                        confidence: vadResult.confidence,
+                      },
+                    })
+                  );
+                  lastSilenceNotificationRef.current = currentTime;
+                }
+              }
             }
           };
 
@@ -429,26 +452,44 @@ const App: React.FC = () => {
             setSpeechDetected(vadResult.isSpeaking);
             setAudioEnergy(vadResult.energy);
 
-            // Only send audio when speech is detected (reduces bandwidth)
-            if (
-              vadResult.isSpeaking &&
-              wsRef.current &&
-              wsRef.current.readyState === WebSocket.OPEN
-            ) {
-              const audioData = Array.from(inputBuffer);
-              wsRef.current.send(
-                JSON.stringify({
-                  type: "audio_data",
-                  data: audioData,
-                  sample_rate: audioContextRef.current?.sampleRate || 16000,
-                  timestamp: Date.now(),
-                  vad: {
-                    isSpeaking: vadResult.isSpeaking,
-                    energy: vadResult.energy,
-                    confidence: vadResult.confidence,
-                  },
-                })
-              );
+            // Smart audio sending: only send when speaking or VAD state changes
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              const currentTime = Date.now();
+
+              // Always send audio when speaking
+              if (vadResult.isSpeaking) {
+                const audioData = Array.from(inputBuffer);
+                wsRef.current.send(
+                  JSON.stringify({
+                    type: "audio_data",
+                    data: audioData,
+                    sample_rate: audioContextRef.current?.sampleRate || 16000,
+                    timestamp: currentTime,
+                    vad: {
+                      isSpeaking: vadResult.isSpeaking,
+                      energy: vadResult.energy,
+                      confidence: vadResult.confidence,
+                    },
+                  })
+                );
+              } else {
+                // Send silence notification periodically (every 500ms) to end sessions
+                const lastSilenceTime = lastSilenceNotificationRef.current;
+                if (currentTime - lastSilenceTime > 500) {
+                  wsRef.current.send(
+                    JSON.stringify({
+                      type: "vad_state",
+                      timestamp: currentTime,
+                      vad: {
+                        isSpeaking: false,
+                        energy: vadResult.energy,
+                        confidence: vadResult.confidence,
+                      },
+                    })
+                  );
+                  lastSilenceNotificationRef.current = currentTime;
+                }
+              }
             }
           };
 

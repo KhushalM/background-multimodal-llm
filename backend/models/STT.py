@@ -19,7 +19,10 @@ class STTConfig:
     device: str = "auto"  # "auto", "cpu", or "cuda"
     torch_dtype: str = "auto"  # "auto", "float16", "float32"
     sample_rate: int = 16000
-    chunk_duration: float = 4.0  # increased from 2.0 to reduce multiple chunks
+    min_speech_duration: float = 0.5  # Minimum speech duration to process (seconds)
+    max_speech_duration: float = (
+        30.0  # Maximum speech duration to prevent memory issues
+    )
     max_retries: int = 3
     use_flash_attention_2: bool = False  # Set to True if supported
 
@@ -43,6 +46,36 @@ class TranscriptionResult(BaseModel):
     processing_time: Optional[float] = None
 
 
+class SpeechSession:
+    """Represents a continuous speech session"""
+
+    def __init__(self, session_id: str, start_timestamp: float):
+        self.session_id = session_id
+        self.start_timestamp = start_timestamp
+        self.audio_buffer: List[float] = []
+        self.sample_rate = 16000
+        self.is_active = True
+        self.last_audio_timestamp = start_timestamp
+
+    def add_audio(self, audio_data: List[float], timestamp: float):
+        """Add audio data to this speech session"""
+        self.audio_buffer.extend(audio_data)
+        self.last_audio_timestamp = timestamp
+
+    def get_duration(self) -> float:
+        """Get the duration of accumulated audio in seconds"""
+        return len(self.audio_buffer) / self.sample_rate
+
+    def to_audio_chunk(self) -> AudioChunk:
+        """Convert the accumulated audio to an AudioChunk"""
+        return AudioChunk(
+            data=self.audio_buffer.copy(),
+            sample_rate=self.sample_rate,
+            timestamp=self.start_timestamp,
+            chunk_id=f"speech_session_{self.session_id}",
+        )
+
+
 class STTService:
     """Speech-to-Text service using HuggingFace Transformers pipeline"""
 
@@ -52,9 +85,9 @@ class STTService:
         self.device = self._get_device()
         self.torch_dtype = self._get_torch_dtype()
 
-        # Audio buffer for accumulating chunks
-        self.audio_buffer = []
-        self.buffer_duration = 0.0
+        # Speech session management
+        self.current_session: Optional[SpeechSession] = None
+        self.session_counter = 0
 
         logger.info(
             f"STT service initialized with device: {self.device}, dtype: {self.torch_dtype}"
@@ -197,7 +230,9 @@ class STTService:
 
             processing_time = time.time() - start_time
 
-            logger.debug(f"Transcribed audio chunk: '{text}' in {processing_time:.2f}s")
+            logger.info(
+                f"Transcribed speech session: '{text}' in {processing_time:.2f}s"
+            )
 
             return TranscriptionResult(
                 text=text,
@@ -217,64 +252,112 @@ class STTService:
                 processing_time=time.time() - start_time,
             )
 
+    def process_audio_with_vad(
+        self,
+        audio_data: List[float],
+        sample_rate: int,
+        vad_info: dict,
+        timestamp: float,
+    ) -> Optional[AudioChunk]:
+        """
+        Process audio data with VAD information to manage speech sessions
+
+        Args:
+            audio_data: Raw audio samples
+            sample_rate: Audio sample rate
+            vad_info: VAD information containing isSpeaking, energy, confidence
+            timestamp: Timestamp of the audio data
+
+        Returns:
+            AudioChunk if a complete speech session is ready for transcription, None otherwise
+        """
+        is_speaking = vad_info.get("isSpeaking", False)
+
+        if is_speaking:
+            # Speech is active
+            if self.current_session is None:
+                # Start new speech session
+                self.session_counter += 1
+                session_id = f"session_{self.session_counter}_{int(timestamp)}"
+                self.current_session = SpeechSession(session_id, timestamp)
+                logger.debug(f"Started new speech session: {session_id}")
+
+            # Add audio to current session
+            self.current_session.add_audio(audio_data, timestamp)
+
+            # Check if session is getting too long (prevent memory issues)
+            if self.current_session.get_duration() > self.config.max_speech_duration:
+                logger.warning(
+                    f"Speech session exceeded max duration ({self.config.max_speech_duration}s), forcing completion"
+                )
+                return self._complete_current_session()
+
+        else:
+            # Speech has ended
+            if self.current_session is not None:
+                # Complete the current session
+                return self._complete_current_session()
+
+        return None
+
+    def _complete_current_session(self) -> Optional[AudioChunk]:
+        """Complete the current speech session and return it as an AudioChunk"""
+        if self.current_session is None:
+            return None
+
+        session_duration = self.current_session.get_duration()
+
+        # Only process if we have enough audio
+        if session_duration >= self.config.min_speech_duration:
+            logger.info(
+                f"Completing speech session {self.current_session.session_id} with {session_duration:.2f}s of audio"
+            )
+            audio_chunk = self.current_session.to_audio_chunk()
+            self.current_session = None
+            return audio_chunk
+        else:
+            logger.debug(
+                f"Speech session too short ({session_duration:.2f}s), discarding"
+            )
+            self.current_session = None
+            return None
+
+    # Legacy methods for backward compatibility
     def add_audio_to_buffer(
         self, audio_data: List[float], sample_rate: int
     ) -> Optional[AudioChunk]:
-        """Add audio data to buffer and return chunk if ready"""
-        self.audio_buffer.extend(audio_data)
+        """
+        Legacy method for backward compatibility
+        This method is deprecated - use process_audio_with_vad instead
+        """
+        logger.warning(
+            "add_audio_to_buffer is deprecated, use process_audio_with_vad instead"
+        )
 
-        # Calculate current buffer duration
-        self.buffer_duration = len(self.audio_buffer) / sample_rate
-
-        # Check if we have enough audio for a chunk
-        if self.buffer_duration >= self.config.chunk_duration:
-            # Extract chunk
-            chunk_samples = int(self.config.chunk_duration * sample_rate)
-            chunk_data = self.audio_buffer[:chunk_samples]
-
-            # Remove processed data from buffer (with minimal overlap for continuity)
-            overlap_samples = int(
-                0.2 * sample_rate
-            )  # 0.2 second overlap - reduced from 0.5
-            self.audio_buffer = self.audio_buffer[chunk_samples - overlap_samples :]
-            self.buffer_duration = len(self.audio_buffer) / sample_rate
-
-            # Create chunk
-            chunk = AudioChunk(
-                data=chunk_data,
-                sample_rate=sample_rate,
-                timestamp=time.time(),
-                chunk_id=f"chunk_{len(chunk_data)}_{int(time.time() * 1000)}",
-            )
-
-            return chunk
-
-        return None
+        # For backward compatibility, assume speech is always active
+        vad_info = {"isSpeaking": True}
+        return self.process_audio_with_vad(
+            audio_data, sample_rate, vad_info, time.time()
+        )
 
     async def transcribe_streaming(
         self, audio_stream
     ) -> AsyncGenerator[TranscriptionResult, None]:
         """Transcribe streaming audio data"""
         async for audio_data, sample_rate in audio_stream:
-            chunk = self.add_audio_to_buffer(audio_data, sample_rate)
+            # For streaming, assume speech is always active
+            vad_info = {"isSpeaking": True}
+            chunk = self.process_audio_with_vad(
+                audio_data, sample_rate, vad_info, time.time()
+            )
             if chunk:
                 result = await self.transcribe_chunk(chunk)
                 if result.text:  # Only yield non-empty results
                     yield result
 
     def flush_buffer(self) -> Optional[AudioChunk]:
-        """Flush remaining audio in buffer"""
-        if len(self.audio_buffer) > 0:
-            chunk = AudioChunk(
-                data=self.audio_buffer.copy(),
-                sample_rate=self.config.sample_rate,
-                timestamp=time.time(),
-                chunk_id=f"final_chunk_{int(time.time() * 1000)}",
-            )
-            self.audio_buffer.clear()
-            self.buffer_duration = 0.0
-            return chunk
-        return None
+        """Flush any remaining speech session"""
+        return self._complete_current_session()
 
 
 # Factory function for easy instantiation

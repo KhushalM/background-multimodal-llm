@@ -7,6 +7,7 @@ interface VADConfig {
     silenceThreshold: number
     minSpeechDuration: number
     maxSilenceDuration: number
+    maxSpeechDuration: number
 }
 
 interface VADResult {
@@ -22,7 +23,8 @@ export const useVoiceActivityDetection = (config: Partial<VADConfig> = {}) => {
         energyThreshold: 0.01,
         silenceThreshold: 0.005,
         minSpeechDuration: 300, // ms
-        maxSilenceDuration: 1000, // ms
+        maxSilenceDuration: 2000, // ms - increased from 1000ms to 2000ms
+        maxSpeechDuration: 30000, // ms - force end speech after 30 seconds
         ...config
     }
 
@@ -65,10 +67,11 @@ export const useVoiceActivityDetection = (config: Partial<VADConfig> = {}) => {
         // Calculate adaptive threshold (median + margin)
         const sortedHistory = [...state.energyHistory].sort((a, b) => a - b)
         const median = sortedHistory[Math.floor(sortedHistory.length / 2)]
-        state.adaptiveThreshold = Math.max(median * 2, defaultConfig.energyThreshold)
+        // Use a more conservative adaptive threshold to prevent false positives
+        state.adaptiveThreshold = Math.max(median * 1.5, defaultConfig.energyThreshold)
     }, [defaultConfig])
 
-    const processAudio = useCallback((audioData: Float32Array, timestamp: number): VADResult => {
+            const processAudio = useCallback((audioData: Float32Array, timestamp: number): VADResult => {
         const energy = calculateEnergy(audioData)
         const zcr = calculateZeroCrossingRate(audioData)
 
@@ -83,7 +86,19 @@ export const useVoiceActivityDetection = (config: Partial<VADConfig> = {}) => {
         let isSpeaking = state.isSpeaking
         let confidence = Math.min(energy / threshold, 1.0)
 
-        if (speechLikely && !state.isSpeaking) {
+        // Debug logging for troubleshooting
+        if (state.isSpeaking || speechLikely) {
+            console.log(`VAD: energy=${energy.toFixed(4)}, threshold=${threshold.toFixed(4)}, zcr=${zcr.toFixed(4)}, speechLikely=${speechLikely}, isSpeaking=${state.isSpeaking}`)
+        }
+
+        // Check for maximum speech duration (safety mechanism)
+        if (state.isSpeaking && timestamp - state.speechStartTime >= defaultConfig.maxSpeechDuration) {
+            console.log('🔇 Speech ended - maximum duration reached')
+            isSpeaking = false
+            state.isSpeaking = false
+            state.speechStartTime = 0
+            state.silenceStartTime = 0
+        } else if (speechLikely && !state.isSpeaking) {
             // Potential speech start
             if (state.speechStartTime === 0) {
                 state.speechStartTime = timestamp
@@ -98,12 +113,13 @@ export const useVoiceActivityDetection = (config: Partial<VADConfig> = {}) => {
             // Potential speech end
             if (state.silenceStartTime === 0) {
                 state.silenceStartTime = timestamp
+                console.log(`🔇 Silence started, waiting ${defaultConfig.maxSilenceDuration}ms for confirmation`)
             } else if (timestamp - state.silenceStartTime >= defaultConfig.maxSilenceDuration) {
                 // Confirmed speech end
                 isSpeaking = false
                 state.isSpeaking = false
                 state.speechStartTime = 0
-                console.log('🔇 Speech ended')
+                console.log('🔇 Speech ended - confirmed after silence period')
             }
         } else if (speechLikely) {
             // Continue speech

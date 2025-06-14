@@ -4,7 +4,6 @@ Background Multimodal LLM Backend Server
 Handles WebSocket connections for screen sharing and voice assistant functionality.
 """
 
-import asyncio
 import json
 import logging
 from typing import Dict, List, Any
@@ -16,9 +15,8 @@ import uvicorn
 
 from services.service_manager import service_manager
 from services.performance_monitor import performance_monitor, PerformanceTimer
-from models.STT import AudioChunk, TranscriptionResult
-from models.multimodal import ConversationInput, ConversationResponse
-from models.TTS import TTSRequest, TTSResponse
+from models.multimodal import ConversationInput
+from models.TTS import TTSRequest
 
 # Set up logging
 logging.basicConfig(
@@ -237,6 +235,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     logger.info("Handling audio data request")
                     await handle_audio_data(websocket, message)
 
+                elif message_type == "vad_state":
+                    logger.debug("Handling VAD state update")
+                    await handle_vad_state(websocket, message)
+
                 elif message_type == "heartbeat":
                     logger.debug("Received heartbeat, sending pong")
                     await manager.send_personal_message(
@@ -344,9 +346,13 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
     audio_data = message.get("data", [])
     timestamp = message.get("timestamp")
     sample_rate = message.get("sample_rate", 16000)
+    vad_info = message.get("vad", {})  # VAD information from frontend
     screen_image = message.get("screen_image")  # Optional screen capture
 
-    logger.debug(f"Received audio data: {len(audio_data)} samples at {timestamp}")
+    logger.debug(
+        f"Received audio data: {len(audio_data)} samples at {timestamp}, "
+        f"VAD: {vad_info}"
+    )
     if screen_image:
         logger.debug("Screen image included with audio data")
 
@@ -357,12 +363,14 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
         return
 
     try:
-        # Add audio to buffer and check if we have a complete chunk
-        audio_chunk = stt_service.add_audio_to_buffer(audio_data, sample_rate)
+        # Process audio with VAD information to manage speech sessions
+        audio_chunk = stt_service.process_audio_with_vad(
+            audio_data, sample_rate, vad_info, timestamp
+        )
 
         if audio_chunk:
-            # Transcribe the chunk with performance monitoring
-            logger.info("Transcribing audio chunk...")
+            # We have a complete speech session ready for transcription
+            logger.info("Transcribing complete speech session...")
             async with PerformanceTimer(performance_monitor, "stt", "transcribe_chunk"):
                 transcription = await stt_service.transcribe_chunk(audio_chunk)
 
@@ -375,6 +383,7 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
                     "text": transcription.text,
                     "timestamp": transcription.timestamp,
                     "processing_time": transcription.processing_time,
+                    "confidence": transcription.confidence,
                 }
 
                 await manager.send_personal_message(json.dumps(response), websocket)
@@ -386,15 +395,17 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
 
             else:
                 logger.debug("Empty transcription result")
-
-        # Send processing acknowledgment
-        response = {
-            "type": "audio_processed",
-            "message": f"Processed {len(audio_data)} audio samples",
-            "timestamp": datetime.now().timestamp(),
-        }
-
-        await manager.send_personal_message(json.dumps(response), websocket)
+        else:
+            # Audio is being accumulated in current speech session
+            # Optionally send partial feedback to client
+            if vad_info.get("isSpeaking", False):
+                response = {
+                    "type": "speech_active",
+                    "message": "Speech detected, accumulating audio...",
+                    "timestamp": datetime.now().timestamp(),
+                    "vad": vad_info,
+                }
+                await manager.send_personal_message(json.dumps(response), websocket)
 
     except Exception as e:
         logger.error(f"Error processing audio: {e}")
@@ -403,6 +414,66 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
         response = {
             "type": "error",
             "message": f"Audio processing error: {str(e)}",
+            "timestamp": datetime.now().timestamp(),
+        }
+
+        await manager.send_personal_message(json.dumps(response), websocket)
+
+
+async def handle_vad_state(websocket: WebSocket, message: Dict[str, Any]):
+    """Handle VAD state updates (silence notifications) from frontend."""
+    timestamp = message.get("timestamp")
+    vad_info = message.get("vad", {})
+
+    logger.debug(f"Received VAD state: {vad_info} at {timestamp}")
+
+    # Get STT service
+    stt_service = service_manager.get_stt_service()
+    if not stt_service:
+        logger.warning("STT service not available")
+        return
+
+    try:
+        # Process VAD state change (typically silence) to potentially end speech sessions
+        audio_chunk = stt_service.process_audio_with_vad(
+            [], 16000, vad_info, timestamp  # Empty audio data for state-only updates
+        )
+
+        if audio_chunk:
+            # Speech session ended due to silence
+            logger.info("Speech session ended due to silence detection")
+            async with PerformanceTimer(performance_monitor, "stt", "transcribe_chunk"):
+                transcription = await stt_service.transcribe_chunk(audio_chunk)
+
+            if transcription.text:
+                logger.info(f"Transcription: {transcription.text}")
+
+                # Send transcription back to client
+                response = {
+                    "type": "transcription_result",
+                    "text": transcription.text,
+                    "timestamp": transcription.timestamp,
+                    "processing_time": transcription.processing_time,
+                    "confidence": transcription.confidence,
+                }
+
+                await manager.send_personal_message(json.dumps(response), websocket)
+
+                # Send transcription to multimodal LLM for processing
+                await process_with_multimodal_llm(
+                    websocket, transcription.text, transcription.timestamp
+                )
+
+            else:
+                logger.debug("Empty transcription result from silence-ended session")
+
+    except Exception as e:
+        logger.error(f"Error processing VAD state: {e}")
+
+        # Send error response
+        response = {
+            "type": "error",
+            "message": f"VAD state processing error: {str(e)}",
             "timestamp": datetime.now().timestamp(),
         }
 
@@ -516,19 +587,29 @@ async def process_with_tts(websocket: WebSocket, text: str, session_id: str):
             "session_id": session_id,
         }
 
-        await manager.send_personal_message(json.dumps(audio_response), websocket)
+        # Check if websocket is still connected before sending TTS response
+        try:
+            await manager.send_personal_message(json.dumps(audio_response), websocket)
+        except Exception as send_error:
+            logger.error(
+                f"Failed to send TTS audio response (connection likely closed): {send_error}"
+            )
 
     except Exception as e:
         logger.error(f"Error processing with TTS: {e}")
 
-        # Send error response
-        error_response = {
-            "type": "error",
-            "message": f"TTS processing error: {str(e)}",
-            "timestamp": datetime.now().timestamp(),
-        }
-
-        await manager.send_personal_message(json.dumps(error_response), websocket)
+        # Check if websocket is still connected before sending error
+        try:
+            error_response = {
+                "type": "error",
+                "message": f"TTS processing error: {str(e)}",
+                "timestamp": datetime.now().timestamp(),
+            }
+            await manager.send_personal_message(json.dumps(error_response), websocket)
+        except Exception as send_error:
+            logger.error(
+                f"Failed to send TTS error response (connection likely closed): {send_error}"
+            )
 
 
 if __name__ == "__main__":
