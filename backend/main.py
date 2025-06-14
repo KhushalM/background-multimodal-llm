@@ -11,6 +11,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.websockets import WebSocketState
 import uvicorn
 
 from services.service_manager import service_manager
@@ -106,7 +107,7 @@ class ConnectionManager:
         try:
             if websocket in self.active_connections:
                 # Check if websocket is still open before sending
-                if websocket.client_state == websocket.client_state.CONNECTED:
+                if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_text(message)
                 else:
                     logger.warning(
@@ -120,7 +121,7 @@ class ConnectionManager:
                 self.connection_attempts.get(websocket, 0) + 1
             )
             if self.connection_attempts[websocket] >= 3:
-                logger.warning(f"Too many send failures, disconnecting client")
+                logger.warning("Too many send failures, disconnecting client")
                 self.disconnect(websocket)
 
     async def broadcast(self, message: str):

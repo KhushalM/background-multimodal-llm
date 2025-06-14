@@ -53,6 +53,8 @@ const App: React.FC = () => {
   const isConnectingRef = useRef(false);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const lastSilenceNotificationRef = useRef<number>(0);
+  const silenceStartTimeRef = useRef<number>(0);
+  const isInExtendedSilenceRef = useRef<boolean>(false);
   const maxRetries = 3;
   const retryCountRef = useRef(0);
 
@@ -68,8 +70,10 @@ const App: React.FC = () => {
   const connectWebSocket = useCallback(() => {
     if (
       wsRef.current?.readyState === WebSocket.OPEN ||
+      wsRef.current?.readyState === WebSocket.CONNECTING ||
       isConnectingRef.current
     ) {
+      console.log("WebSocket already connected or connecting, skipping");
       return;
     }
 
@@ -80,14 +84,14 @@ const App: React.FC = () => {
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    // Set a connection timeout
+    // Set a connection timeout (increased for TTS processing)
     const connectionTimeout = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
         console.error("WebSocket connection timeout");
         ws.close();
         isConnectingRef.current = false;
       }
-    }, 10000);
+    }, 60000); // Increased to 60 seconds for TTS processing
 
     ws.onopen = () => {
       clearTimeout(connectionTimeout);
@@ -121,15 +125,24 @@ const App: React.FC = () => {
         heartbeatIntervalRef.current = null;
       }
 
-      // Only attempt to reconnect if we should keep the connection
+      // Reset silence tracking
+      lastSilenceNotificationRef.current = 0;
+      silenceStartTimeRef.current = 0;
+      isInExtendedSilenceRef.current = false;
+
+      // Only attempt to reconnect if we should keep the connection and it wasn't a normal close
       if (
         shouldKeepConnectionRef.current &&
-        retryCountRef.current < maxRetries
+        retryCountRef.current < maxRetries &&
+        event.code !== 1000 // Don't reconnect on normal close
       ) {
         retryCountRef.current += 1;
         const delay = Math.min(
           1000 * Math.pow(2, retryCountRef.current - 1),
           10000
+        );
+        console.log(
+          `Reconnecting in ${delay}ms (attempt ${retryCountRef.current})`
         );
         setTimeout(connectWebSocket, delay);
       }
@@ -394,6 +407,10 @@ const App: React.FC = () => {
 
               // Always send audio when speaking
               if (vadResult.isSpeaking) {
+                // Reset silence tracking when speech is detected
+                silenceStartTimeRef.current = 0;
+                isInExtendedSilenceRef.current = false;
+
                 wsRef.current.send(
                   JSON.stringify({
                     type: "audio_data",
@@ -408,9 +425,29 @@ const App: React.FC = () => {
                   })
                 );
               } else {
-                // Send silence notification periodically (every 500ms) to end sessions
+                // Track silence duration
+                if (silenceStartTimeRef.current === 0) {
+                  silenceStartTimeRef.current = currentTime;
+                }
+
+                const silenceDuration =
+                  currentTime - silenceStartTimeRef.current;
+
+                // Stop sending VAD states after 5 seconds of silence
+                if (silenceDuration > 5000) {
+                  if (!isInExtendedSilenceRef.current) {
+                    console.log(
+                      "🔇 Entering extended silence mode - stopping VAD notifications"
+                    );
+                    isInExtendedSilenceRef.current = true;
+                  }
+                  // Don't send any more VAD states during extended silence
+                  return;
+                }
+
+                // Send silence notification during initial silence period (first 5 seconds)
                 const lastSilenceTime = lastSilenceNotificationRef.current;
-                if (currentTime - lastSilenceTime > 500) {
+                if (currentTime - lastSilenceTime > 2000) {
                   wsRef.current.send(
                     JSON.stringify({
                       type: "vad_state",
@@ -458,6 +495,10 @@ const App: React.FC = () => {
 
               // Always send audio when speaking
               if (vadResult.isSpeaking) {
+                // Reset silence tracking when speech is detected
+                silenceStartTimeRef.current = 0;
+                isInExtendedSilenceRef.current = false;
+
                 const audioData = Array.from(inputBuffer);
                 wsRef.current.send(
                   JSON.stringify({
@@ -473,9 +514,29 @@ const App: React.FC = () => {
                   })
                 );
               } else {
-                // Send silence notification periodically (every 500ms) to end sessions
+                // Track silence duration
+                if (silenceStartTimeRef.current === 0) {
+                  silenceStartTimeRef.current = currentTime;
+                }
+
+                const silenceDuration =
+                  currentTime - silenceStartTimeRef.current;
+
+                // Stop sending VAD states after 5 seconds of silence
+                if (silenceDuration > 5000) {
+                  if (!isInExtendedSilenceRef.current) {
+                    console.log(
+                      "🔇 Entering extended silence mode - stopping VAD notifications"
+                    );
+                    isInExtendedSilenceRef.current = true;
+                  }
+                  // Don't send any more VAD states during extended silence
+                  return;
+                }
+
+                // Send silence notification during initial silence period (first 5 seconds)
                 const lastSilenceTime = lastSilenceNotificationRef.current;
-                if (currentTime - lastSilenceTime > 500) {
+                if (currentTime - lastSilenceTime > 2000) {
                   wsRef.current.send(
                     JSON.stringify({
                       type: "vad_state",
@@ -534,6 +595,12 @@ const App: React.FC = () => {
         setSpeechDetected(false);
         setAudioEnergy(0);
         vad.reset();
+
+        // Reset silence tracking
+        silenceStartTimeRef.current = 0;
+        isInExtendedSilenceRef.current = false;
+        lastSilenceNotificationRef.current = 0;
+
         setStatusMessage("Voice assistant deactivated");
 
         // Close WebSocket if screen sharing is also inactive
