@@ -51,6 +51,7 @@ const App: React.FC = () => {
   const playbackAudioContextRef = useRef<AudioContext | null>(null);
   const shouldKeepConnectionRef = useRef(false);
   const isConnectingRef = useRef(false);
+  const heartbeatIntervalRef = useRef<number | null>(null);
   const maxRetries = 3;
   const retryCountRef = useRef(0);
 
@@ -92,6 +93,18 @@ const App: React.FC = () => {
       retryCountRef.current = 0;
       setState((prev) => ({ ...prev, isConnected: true }));
       setStatusMessage("WebSocket connection established");
+
+      // Start heartbeat to keep connection alive
+      heartbeatIntervalRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(
+            JSON.stringify({
+              type: "heartbeat",
+              timestamp: Date.now(),
+            })
+          );
+        }
+      }, 30000); // Send heartbeat every 30 seconds
     };
 
     ws.onclose = (event) => {
@@ -99,6 +112,12 @@ const App: React.FC = () => {
       isConnectingRef.current = false;
       setState((prev) => ({ ...prev, isConnected: false }));
       setStatusMessage(`WebSocket connection lost (code: ${event.code})`);
+
+      // Clear heartbeat interval
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
 
       // Only attempt to reconnect if we should keep the connection
       if (
@@ -322,54 +341,121 @@ const App: React.FC = () => {
         }
 
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
         });
         mediaStreamRef.current = stream;
 
         // Set up audio context for processing
-        audioContextRef.current = new AudioContext();
+        audioContextRef.current = new AudioContext({ sampleRate: 16000 });
+
+        // Resume audio context if suspended
+        if (audioContextRef.current.state === "suspended") {
+          await audioContextRef.current.resume();
+        }
+
         const source = audioContextRef.current.createMediaStreamSource(stream);
 
-        // Create a ScriptProcessorNode for real-time audio processing
-        const processor = audioContextRef.current.createScriptProcessor(
-          4096,
-          1,
-          1
-        );
+        // Use AudioWorklet instead of deprecated ScriptProcessorNode
+        try {
+          // Try to use AudioWorklet (modern approach)
+          await audioContextRef.current.audioWorklet.addModule(
+            "/audio-processor.js"
+          );
+          const workletNode = new AudioWorkletNode(
+            audioContextRef.current,
+            "audio-processor"
+          );
 
-        processor.onaudioprocess = (event) => {
-          const inputBuffer = event.inputBuffer.getChannelData(0);
+          workletNode.port.onmessage = (event) => {
+            const { audioData, energy, isSpeaking } = event.data;
 
-          // Voice Activity Detection
-          const vadResult = vad.processAudio(inputBuffer, Date.now());
-          setSpeechDetected(vadResult.isSpeaking);
-          setAudioEnergy(vadResult.energy);
-
-          // Only send audio when speech is detected (reduces bandwidth)
-          if (
-            vadResult.isSpeaking &&
-            wsRef.current &&
-            wsRef.current.readyState === WebSocket.OPEN
-          ) {
-            const audioData = Array.from(inputBuffer);
-            wsRef.current.send(
-              JSON.stringify({
-                type: "audio_data",
-                data: audioData,
-                sample_rate: audioContextRef.current?.sampleRate || 16000,
-                timestamp: Date.now(),
-                vad: {
-                  isSpeaking: vadResult.isSpeaking,
-                  energy: vadResult.energy,
-                  confidence: vadResult.confidence,
-                },
-              })
+            // Voice Activity Detection
+            const vadResult = vad.processAudio(
+              new Float32Array(audioData),
+              Date.now()
             );
-          }
-        };
+            setSpeechDetected(vadResult.isSpeaking);
+            setAudioEnergy(vadResult.energy);
 
-        source.connect(processor);
-        processor.connect(audioContextRef.current.destination);
+            // Only send audio when speech is detected (reduces bandwidth)
+            if (
+              vadResult.isSpeaking &&
+              wsRef.current &&
+              wsRef.current.readyState === WebSocket.OPEN
+            ) {
+              wsRef.current.send(
+                JSON.stringify({
+                  type: "audio_data",
+                  data: audioData,
+                  sample_rate: audioContextRef.current?.sampleRate || 16000,
+                  timestamp: Date.now(),
+                  vad: {
+                    isSpeaking: vadResult.isSpeaking,
+                    energy: vadResult.energy,
+                    confidence: vadResult.confidence,
+                  },
+                })
+              );
+            }
+          };
+
+          source.connect(workletNode);
+          // Remove connection to destination to prevent hearing own voice
+          // workletNode.connect(audioContextRef.current.destination);
+        } catch (workletError) {
+          console.warn(
+            "AudioWorklet not supported, falling back to ScriptProcessorNode:",
+            workletError
+          );
+
+          // Fallback to ScriptProcessorNode with improved stability
+          const processor = audioContextRef.current.createScriptProcessor(
+            4096,
+            1,
+            1
+          );
+
+          processor.onaudioprocess = (event) => {
+            const inputBuffer = event.inputBuffer.getChannelData(0);
+
+            // Voice Activity Detection
+            const vadResult = vad.processAudio(inputBuffer, Date.now());
+            setSpeechDetected(vadResult.isSpeaking);
+            setAudioEnergy(vadResult.energy);
+
+            // Only send audio when speech is detected (reduces bandwidth)
+            if (
+              vadResult.isSpeaking &&
+              wsRef.current &&
+              wsRef.current.readyState === WebSocket.OPEN
+            ) {
+              const audioData = Array.from(inputBuffer);
+              wsRef.current.send(
+                JSON.stringify({
+                  type: "audio_data",
+                  data: audioData,
+                  sample_rate: audioContextRef.current?.sampleRate || 16000,
+                  timestamp: Date.now(),
+                  vad: {
+                    isSpeaking: vadResult.isSpeaking,
+                    energy: vadResult.energy,
+                    confidence: vadResult.confidence,
+                  },
+                })
+              );
+            }
+          };
+
+          source.connect(processor);
+          // Remove connection to destination to prevent hearing own voice
+          // processor.connect(audioContextRef.current.destination);
+        }
 
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(
@@ -390,7 +476,7 @@ const App: React.FC = () => {
         }
 
         if (audioContextRef.current) {
-          audioContextRef.current.close();
+          await audioContextRef.current.close();
           audioContextRef.current = null;
         }
 
@@ -427,6 +513,13 @@ const App: React.FC = () => {
   useEffect(() => {
     return () => {
       shouldKeepConnectionRef.current = false;
+
+      // Clear heartbeat interval
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.close(1000, "Component unmounting");
       }

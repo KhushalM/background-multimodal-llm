@@ -1,11 +1,9 @@
 from pydantic import BaseModel
 import asyncio
-import io
 import logging
 import numpy as np
 import time
-from typing import Optional, Union, List, AsyncGenerator
-import json
+from typing import Optional, List, AsyncGenerator
 from dataclasses import dataclass
 import torch
 from transformers import pipeline, AutoProcessor, AutoModelForSpeechSeq2Seq
@@ -21,7 +19,7 @@ class STTConfig:
     device: str = "auto"  # "auto", "cpu", or "cuda"
     torch_dtype: str = "auto"  # "auto", "float16", "float32"
     sample_rate: int = 16000
-    chunk_duration: float = 2.0  # seconds
+    chunk_duration: float = 4.0  # increased from 2.0 to reduce multiple chunks
     max_retries: int = 3
     use_flash_attention_2: bool = False  # Set to True if supported
 
@@ -58,14 +56,16 @@ class STTService:
         self.audio_buffer = []
         self.buffer_duration = 0.0
 
-        logger.info(f"STT service initialized with device: {self.device}, dtype: {self.torch_dtype}")
+        logger.info(
+            f"STT service initialized with device: {self.device}, dtype: {self.torch_dtype}"
+        )
 
     def _get_device(self) -> str:
         """Determine the best device to use"""
         if self.config.device == "auto":
             if torch.cuda.is_available():
                 return "cuda"
-            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 return "mps"  # Apple Silicon GPU
             else:
                 return "cpu"
@@ -87,14 +87,16 @@ class STTService:
         """Initialize the pipeline asynchronously"""
         try:
             logger.info(f"Loading STT model: {self.config.model_name}")
-            
+
             # Load model and processor
             model = AutoModelForSpeechSeq2Seq.from_pretrained(
                 self.config.model_name,
                 torch_dtype=self.torch_dtype,
                 low_cpu_mem_usage=True,
                 use_safetensors=True,
-                attn_implementation="flash_attention_2" if self.config.use_flash_attention_2 else None
+                attn_implementation=(
+                    "flash_attention_2" if self.config.use_flash_attention_2 else None
+                ),
             )
             model.to(self.device)
 
@@ -115,11 +117,11 @@ class STTService:
             )
 
             logger.info("STT pipeline loaded successfully")
-            
+
         except Exception as e:
             logger.error(f"Error loading STT pipeline: {e}")
             raise
-            
+
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -130,7 +132,9 @@ class STTService:
                 torch.cuda.empty_cache()
             self.pipeline = None
 
-    def _preprocess_audio(self, audio_data: List[float], sample_rate: int) -> np.ndarray:
+    def _preprocess_audio(
+        self, audio_data: List[float], sample_rate: int
+    ) -> np.ndarray:
         """Convert audio data to the format expected by Whisper"""
         try:
             # Convert to numpy array
@@ -163,7 +167,9 @@ class STTService:
 
         try:
             if self.pipeline is None:
-                raise RuntimeError("STT pipeline not initialized. Use 'async with' context manager.")
+                raise RuntimeError(
+                    "STT pipeline not initialized. Use 'async with' context manager."
+                )
 
             # Preprocess audio
             audio_array = self._preprocess_audio(
@@ -174,12 +180,12 @@ class STTService:
             # Run in executor to avoid blocking the event loop
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None, 
+                None,
                 lambda: self.pipeline(
                     audio_array,
                     generate_kwargs={"language": "english"},
-                    return_timestamps=True
-                )
+                    return_timestamps=True,
+                ),
             )
 
             # Extract text from result
@@ -226,8 +232,10 @@ class STTService:
             chunk_samples = int(self.config.chunk_duration * sample_rate)
             chunk_data = self.audio_buffer[:chunk_samples]
 
-            # Remove processed data from buffer (with overlap for continuity)
-            overlap_samples = int(0.5 * sample_rate)  # 0.5 second overlap
+            # Remove processed data from buffer (with minimal overlap for continuity)
+            overlap_samples = int(
+                0.2 * sample_rate
+            )  # 0.2 second overlap - reduced from 0.5
             self.audio_buffer = self.audio_buffer[chunk_samples - overlap_samples :]
             self.buffer_duration = len(self.audio_buffer) / sample_rate
 

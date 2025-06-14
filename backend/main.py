@@ -107,7 +107,14 @@ class ConnectionManager:
     async def send_personal_message(self, message: str, websocket: WebSocket):
         try:
             if websocket in self.active_connections:
-                await websocket.send_text(message)
+                # Check if websocket is still open before sending
+                if websocket.client_state == websocket.client_state.CONNECTED:
+                    await websocket.send_text(message)
+                else:
+                    logger.warning(
+                        "Attempted to send message to disconnected websocket"
+                    )
+                    self.disconnect(websocket)
         except Exception as e:
             logger.error(f"Error sending message: {e}")
             # Only disconnect if we've had multiple failures
@@ -229,6 +236,18 @@ async def websocket_endpoint(websocket: WebSocket):
                 elif message_type == "audio_data":
                     logger.info("Handling audio data request")
                     await handle_audio_data(websocket, message)
+
+                elif message_type == "heartbeat":
+                    logger.debug("Received heartbeat, sending pong")
+                    await manager.send_personal_message(
+                        json.dumps(
+                            {
+                                "type": "heartbeat_pong",
+                                "timestamp": datetime.now().timestamp(),
+                            }
+                        ),
+                        websocket,
+                    )
 
                 else:
                     logger.warning(f"Unknown message type received: {message_type}")
