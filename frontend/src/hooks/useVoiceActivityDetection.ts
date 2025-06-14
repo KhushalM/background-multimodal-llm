@@ -163,9 +163,8 @@ export const useVoiceActivityDetection = (config: Partial<VADConfig> = {}) => {
         if (voiceLikely) {
             state.consecutiveSpeechFrames++
             state.consecutiveSilenceFrames = 0
-            if (process.env.NODE_ENV === 'development') {
-                console.log(`VAD: energy=${energy.toFixed(5)}, threshold=${threshold.toFixed(5)}, SNR=${signalToNoiseRatio.toFixed(2)}, spectral=${spectralCentroid.toFixed(0)}Hz, zcr=${zcr.toFixed(3)}, voiceLikely=${voiceLikely}, isSpeaking=${state.isSpeaking}, frames=${state.consecutiveSpeechFrames}`)
-            }
+            // Debug logging in development
+            console.log(`VAD: energy=${energy.toFixed(5)}, threshold=${threshold.toFixed(5)}, SNR=${signalToNoiseRatio.toFixed(2)}, spectral=${spectralCentroid.toFixed(0)}Hz, zcr=${zcr.toFixed(3)}, voiceLikely=${voiceLikely}, isSpeaking=${state.isSpeaking}, frames=${state.consecutiveSpeechFrames}`)
             state.consecutiveSilenceFrames++
             state.consecutiveSpeechFrames = 0
         }
