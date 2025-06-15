@@ -214,7 +214,7 @@ class STTService:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
                 None,
-                lambda: self.pipeline(
+                lambda: self.pipeline(  # type: ignore
                     audio_array,
                     generate_kwargs={"language": "english"},
                     return_timestamps=True,
@@ -273,6 +273,41 @@ class STTService:
         """
         is_speaking = vad_info.get("isSpeaking", False)
 
+        # Handle complete speech session sent as single chunk (frontend batch mode)
+        if not is_speaking and len(audio_data) > 0:
+            session_duration = len(audio_data) / sample_rate
+
+            # Check if this is a complete speech session (has sufficient duration)
+            if session_duration >= self.config.min_speech_duration:
+                logger.info(
+                    f"Processing complete speech session: {session_duration:.2f}s of audio"
+                )
+
+                # Create audio chunk directly from the complete session
+                session_id = f"batch_session_{int(timestamp)}"
+                audio_chunk = AudioChunk(
+                    data=audio_data,
+                    sample_rate=sample_rate,
+                    timestamp=timestamp,
+                    chunk_id=session_id,
+                )
+
+                # Clear any existing session since we got a complete one
+                if self.current_session is not None:
+                    logger.debug("Clearing existing session for batch processing")
+                    self.current_session = None
+
+                return audio_chunk
+            else:
+                logger.debug(
+                    f"Batch audio too short ({session_duration:.2f}s), discarding"
+                )
+                # Clear any existing session
+                if self.current_session is not None:
+                    self.current_session = None
+                return None
+
+        # Original streaming logic for incremental audio processing
         if is_speaking:
             # Speech is active
             if self.current_session is None:
@@ -293,7 +328,7 @@ class STTService:
                 return self._complete_current_session()
 
         else:
-            # Speech has ended
+            # Speech has ended (for streaming mode)
             if self.current_session is not None:
                 # Complete the current session
                 return self._complete_current_session()
