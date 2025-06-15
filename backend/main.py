@@ -283,6 +283,11 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"Unexpected error in WebSocket handler: {e}")
+        logger.error(f"WebSocket state: {websocket.client_state}")
+        logger.error(f"Error type: {type(e).__name__}")
+        import traceback
+
+        logger.error(f"Traceback: {traceback.format_exc()}")
         manager.disconnect(websocket)
 
 

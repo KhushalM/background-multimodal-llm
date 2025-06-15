@@ -95,7 +95,15 @@ const App: React.FC = () => {
   );
 
   // WebSocket hook
-  const { connect, disconnect, sendMessage, setKeepConnection } = useWebSocket({
+  const {
+    connect,
+    disconnect,
+    sendMessage,
+    setKeepConnection,
+    setProtectedOperation,
+    isActuallyConnected,
+    waitForConnection,
+  } = useWebSocket({
     onMessage: handleWebSocketMessage,
     onConnectionChange: setIsConnected,
     onStatusChange: setStatusMessage,
@@ -131,6 +139,9 @@ const App: React.FC = () => {
     onStatusChange: setStatusMessage,
     sendMessage,
     isScreenSharing,
+    setProtectedOperation,
+    isActuallyConnected,
+    waitForConnection,
     onConnectionChange: (shouldKeep) => {
       setKeepConnection(shouldKeep);
       if (shouldKeep) {
