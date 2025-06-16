@@ -9,15 +9,22 @@ from pydantic import BaseModel
 
 import torch
 import numpy as np
-from transformers import pipeline, SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
+from transformers import (
+    pipeline,
+    SpeechT5Processor,
+    SpeechT5ForTextToSpeech,
+    SpeechT5HifiGan,
+)
 from datasets import load_dataset
 import soundfile as sf
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class TTSConfig:
     """Configuration for Text-to-Speech service"""
+
     model_name: str = "microsoft/speecht5_tts"
     vocoder_name: str = "microsoft/speecht5_hifigan"
     device: str = "auto"  # "auto", "cpu", "cuda", or "mps"
@@ -30,16 +37,20 @@ class TTSConfig:
     # "facebook/mms-tts-eng" - Multilingual support
     # "suno/bark" - Very natural but slower
 
+
 class TTSRequest(BaseModel):
     """Request for text-to-speech conversion"""
+
     text: str
     voice_preset: str = "default"
     speed: float = 1.0
     pitch: float = 1.0
     session_id: Optional[str] = None
 
+
 class TTSResponse(BaseModel):
     """Response from text-to-speech conversion"""
+
     audio_data: List[float]  # Audio samples as float list
     sample_rate: int
     duration: float
@@ -47,28 +58,31 @@ class TTSResponse(BaseModel):
     text: str
     audio_format: str = "wav"
 
+
 class TTSService:
     """Text-to-Speech service using HuggingFace Transformers pipeline"""
-    
+
     def __init__(self, config: TTSConfig):
         self.config = config
         self.device = self._get_device()
         self.torch_dtype = self._get_torch_dtype()
-        
+
         # Pipeline components
         self.model = None
         self.processor = None
         self.vocoder = None
         self.speaker_embeddings = None
-        
-        logger.info(f"TTS service initialized with device: {self.device}, dtype: {self.torch_dtype}")
-        
+
+        logger.info(
+            f"TTS service initialized with device: {self.device}, dtype: {self.torch_dtype}"
+        )
+
     def _get_device(self) -> str:
         """Determine the best device to use"""
         if self.config.device == "auto":
             if torch.cuda.is_available():
                 return "cuda"
-            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 return "mps"  # Apple Silicon GPU
             else:
                 return "cpu"
@@ -85,42 +99,44 @@ class TTSService:
             return torch.float16
         else:
             return torch.float32
-        
+
     async def __aenter__(self):
         """Initialize the pipeline asynchronously"""
         try:
             logger.info(f"Loading TTS model: {self.config.model_name}")
-            
+
             # Load processor
             self.processor = SpeechT5Processor.from_pretrained(self.config.model_name)
-            
+
             # Load model
             self.model = SpeechT5ForTextToSpeech.from_pretrained(
-                self.config.model_name,
-                torch_dtype=self.torch_dtype
+                self.config.model_name, torch_dtype=self.torch_dtype
             )
             self.model.to(self.device)
-            
+
             # Load vocoder
             self.vocoder = SpeechT5HifiGan.from_pretrained(
-                self.config.vocoder_name,
-                torch_dtype=self.torch_dtype
+                self.config.vocoder_name, torch_dtype=self.torch_dtype
             )
             self.vocoder.to(self.device)
-            
+
             # Load speaker embeddings dataset
-            embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
-            speaker_embeddings = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
+            embeddings_dataset = load_dataset(
+                "Matthijs/cmu-arctic-xvectors", split="validation"
+            )
+            speaker_embeddings = torch.tensor(
+                embeddings_dataset[7306]["xvector"]
+            ).unsqueeze(0)
             self.speaker_embeddings = speaker_embeddings.to(self.device)
-            
+
             logger.info("TTS pipeline loaded successfully")
-            
+
         except Exception as e:
             logger.error(f"Error loading TTS pipeline: {e}")
             raise
-            
+
         return self
-        
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Cleanup resources"""
         if self.model is not None:
@@ -131,12 +147,12 @@ class TTSService:
             self.processor = None
             self.vocoder = None
             self.speaker_embeddings = None
-    
+
     def _preprocess_text(self, text: str) -> str:
         """Clean and prepare text for TTS"""
         # Remove or replace problematic characters
         text = text.strip()
-        
+
         # Handle common replacements for better pronunciation
         replacements = {
             "&": "and",
@@ -148,20 +164,22 @@ class TTSService:
             "—": " - ",
             "–": " - ",
         }
-        
+
         for old, new in replacements.items():
             text = text.replace(old, new)
-        
+
         # Split very long texts into sentences for better processing
         if len(text) > 500:
             # Simple sentence splitting
             sentences = text.replace(". ", ".\n").split("\n")
             # Take first few sentences to stay under limit
             text = ". ".join(sentences[:3]) + "."
-        
+
         return text
-    
-    def _postprocess_audio(self, audio_data: np.ndarray, target_sample_rate: int = None) -> np.ndarray:
+
+    def _postprocess_audio(
+        self, audio_data: np.ndarray, target_sample_rate: int = None
+    ) -> np.ndarray:
         """Post-process audio data"""
         if target_sample_rate and target_sample_rate != self.config.sample_rate:
             # Simple resampling
@@ -170,133 +188,129 @@ class TTSService:
             audio_data = np.interp(
                 np.linspace(0, len(audio_data) - 1, new_length),
                 np.arange(len(audio_data)),
-                audio_data
+                audio_data,
             )
-        
+
         # Normalize audio to prevent clipping
         if np.max(np.abs(audio_data)) > 0:
             audio_data = audio_data / np.max(np.abs(audio_data)) * 0.8
-        
+
         return audio_data
-    
+
     async def synthesize_speech(self, request: TTSRequest) -> TTSResponse:
         """Convert text to speech"""
         start_time = time.time()
-        
+
         try:
             if self.model is None or self.processor is None:
-                raise RuntimeError("TTS pipeline not initialized. Use 'async with' context manager.")
-            
+                raise RuntimeError(
+                    "TTS pipeline not initialized. Use 'async with' context manager."
+                )
+
             # Preprocess text
             processed_text = self._preprocess_text(request.text)
             logger.info(f"Synthesizing speech for: {processed_text[:100]}...")
-            
+
             # Run in executor to avoid blocking the event loop
             loop = asyncio.get_event_loop()
             audio_data = await loop.run_in_executor(
-                None, 
-                self._generate_speech, 
-                processed_text
+                None, self._generate_speech, processed_text
             )
-            
+
             # Post-process audio
             audio_data = self._postprocess_audio(audio_data)
             duration = len(audio_data) / self.config.sample_rate
             processing_time = time.time() - start_time
-            
+
             logger.info(f"Generated {duration:.2f}s of audio in {processing_time:.2f}s")
-            
+
             return TTSResponse(
                 audio_data=audio_data.tolist(),
                 sample_rate=self.config.sample_rate,
                 duration=duration,
                 processing_time=processing_time,
-                text=processed_text
+                text=processed_text,
             )
-                    
+
         except Exception as e:
             logger.error(f"Error in synthesize_speech: {e}")
-            
+
             # Return silence on failure
             duration = 1.0  # 1 second of silence
             silence = np.zeros(int(duration * self.config.sample_rate))
-            
+
             return TTSResponse(
                 audio_data=silence.tolist(),
                 sample_rate=self.config.sample_rate,
                 duration=duration,
                 processing_time=time.time() - start_time,
                 text=request.text,
-                audio_format="silence"
+                audio_format="silence",
             )
-    
+
     def _generate_speech(self, text: str) -> np.ndarray:
         """Generate speech from text using the loaded model"""
         # Tokenize text
         inputs = self.processor(text=text, return_tensors="pt")
         input_ids = inputs["input_ids"].to(self.device)
-        
+
         # Generate speech with the model
         with torch.no_grad():
             speech = self.model.generate_speech(
-                input_ids, 
-                self.speaker_embeddings, 
-                vocoder=self.vocoder
+                input_ids, self.speaker_embeddings, vocoder=self.vocoder
             )
-        
+
         # Convert to numpy and ensure it's on CPU
         speech_np = speech.cpu().numpy()
-        
+
         return speech_np
-    
-    async def synthesize_batch(self, texts: List[str], session_id: Optional[str] = None) -> List[TTSResponse]:
+
+    async def synthesize_batch(
+        self, texts: List[str], session_id: Optional[str] = None
+    ) -> List[TTSResponse]:
         """Synthesize multiple texts in batch"""
         responses = []
-        
+
         for text in texts:
-            request = TTSRequest(
-                text=text,
-                session_id=session_id
-            )
+            request = TTSRequest(text=text, session_id=session_id)
             response = await self.synthesize_speech(request)
             responses.append(response)
-            
+
             # Small delay between requests to manage memory
             await asyncio.sleep(0.1)
-        
+
         return responses
-    
+
     def get_supported_voices(self) -> List[str]:
         """Get list of supported voice presets"""
         # For SpeechT5, we use different speaker embeddings
         # In a full implementation, you could load different embeddings
         return ["default", "male", "female", "neutral"]
-    
+
     async def test_synthesis(self) -> bool:
         """Test if the TTS service is working"""
         try:
             test_request = TTSRequest(
-                text="Hello, this is a test.",
-                voice_preset="default"
+                text="Hello, this is a test.", voice_preset="default"
             )
-            
+
             response = await self.synthesize_speech(test_request)
             return len(response.audio_data) > 0 and response.audio_format != "silence"
-            
+
         except Exception as e:
             logger.error(f"TTS test failed: {e}")
             return False
 
+
 # Factory function for easy instantiation
-async def create_tts_service(model_name: str = "microsoft/speecht5_tts", **config_kwargs) -> TTSService:
+async def create_tts_service(
+    model_name: str = "microsoft/speecht5_tts", **config_kwargs
+) -> TTSService:
     """Create and initialize TTS service"""
-    config = TTSConfig(
-        model_name=model_name,
-        **config_kwargs
-    )
-    
+    config = TTSConfig(model_name=model_name, **config_kwargs)
+
     service = TTSService(config)
-    
+
     # Test the service
     try:
         async with service:
@@ -308,5 +322,5 @@ async def create_tts_service(model_name: str = "microsoft/speecht5_tts", **confi
     except Exception as e:
         logger.error(f"TTS service initialization error: {e}")
         # Don't raise, allow service to be created anyway
-    
+
     return service

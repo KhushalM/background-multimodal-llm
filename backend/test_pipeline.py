@@ -206,69 +206,69 @@ async def test_realistic_audio_pipeline():
 
     try:
         async with await create_stt_service() as stt_service:
-            # Generate synthetic audio (represents speech)
-            print("🎵 Generating synthetic speech audio...")
-            sample_rate = 16000
-            duration = 3.0
+        # Generate synthetic audio (represents speech)
+        print("🎵 Generating synthetic speech audio...")
+        sample_rate = 16000
+        duration = 3.0
 
-            # Create more realistic audio (mix of frequencies)
-            t = np.linspace(0, duration, int(sample_rate * duration))
+        # Create more realistic audio (mix of frequencies)
+        t = np.linspace(0, duration, int(sample_rate * duration))
 
-            # Mix of frequencies to simulate speech patterns
-            audio = (
-                0.3 * np.sin(2 * np.pi * 200 * t)  # Low frequency
-                + 0.2 * np.sin(2 * np.pi * 800 * t)  # Mid frequency
-                + 0.1 * np.sin(2 * np.pi * 1600 * t)
-            )  # High frequency
+        # Mix of frequencies to simulate speech patterns
+        audio = (
+            0.3 * np.sin(2 * np.pi * 200 * t)  # Low frequency
+            + 0.2 * np.sin(2 * np.pi * 800 * t)  # Mid frequency
+            + 0.1 * np.sin(2 * np.pi * 1600 * t)
+        )  # High frequency
 
-            # Add envelope to simulate speech cadence
-            envelope = np.exp(-t / 2) * (1 + 0.5 * np.sin(2 * np.pi * 3 * t))
-            audio *= envelope
+        # Add envelope to simulate speech cadence
+        envelope = np.exp(-t / 2) * (1 + 0.5 * np.sin(2 * np.pi * 3 * t))
+        audio *= envelope
 
-            # Add noise
-            noise = 0.05 * np.random.normal(0, 1, len(audio))
-            audio += noise
+        # Add noise
+        noise = 0.05 * np.random.normal(0, 1, len(audio))
+        audio += noise
 
-            print(f"🎤 Testing STT with {duration}s synthetic audio...")
+        print(f"🎤 Testing STT with {duration}s synthetic audio...")
 
-            # Test audio buffering (simulate streaming)
-            chunk_size = sample_rate // 10  # 0.1 second chunks
-            transcriptions = []
+        # Test audio buffering (simulate streaming)
+        chunk_size = sample_rate // 10  # 0.1 second chunks
+        transcriptions = []
 
-            for i in range(0, len(audio), chunk_size):
-                chunk_data = audio[i : i + chunk_size]
+        for i in range(0, len(audio), chunk_size):
+            chunk_data = audio[i : i + chunk_size]
 
-                # Add to STT buffer
-                audio_chunk = stt_service.add_audio_to_buffer(
-                    chunk_data.tolist(), sample_rate
-                )
+            # Add to STT buffer
+            audio_chunk = stt_service.add_audio_to_buffer(
+                chunk_data.tolist(), sample_rate
+            )
 
-                if audio_chunk:
-                    print(f"📦 Processing audio chunk at {i/sample_rate:.1f}s")
-                    result = await stt_service.transcribe_chunk(audio_chunk)
+            if audio_chunk:
+                print(f"📦 Processing audio chunk at {i/sample_rate:.1f}s")
+                result = await stt_service.transcribe_chunk(audio_chunk)
 
-                    if result.text:
-                        transcriptions.append(result.text)
-                        print(f"📝 Transcription: '{result.text}'")
-                    else:
-                        print("📝 No transcription (expected for synthetic audio)")
-
-            # Flush final buffer
-            final_chunk = stt_service.flush_buffer()
-            if final_chunk:
-                print("📦 Processing final audio chunk")
-                result = await stt_service.transcribe_chunk(final_chunk)
                 if result.text:
                     transcriptions.append(result.text)
+                    print(f"📝 Transcription: '{result.text}'")
+                else:
+                    print("📝 No transcription (expected for synthetic audio)")
 
-            print(f"📊 Audio Processing Results:")
-            print(f"   Audio duration: {duration:.1f}s")
-            print(
-                f"   Chunks processed: {len(transcriptions) if transcriptions else 'None with transcription'}"
-            )
-            print(
-                f"   STT behavior: {'✅ Working' if transcriptions else '⚠️ No transcriptions (normal for synthetic audio)'}"
-            )
+        # Flush final buffer
+        final_chunk = stt_service.flush_buffer()
+        if final_chunk:
+            print("📦 Processing final audio chunk")
+            result = await stt_service.transcribe_chunk(final_chunk)
+            if result.text:
+                transcriptions.append(result.text)
+
+        print(f"📊 Audio Processing Results:")
+        print(f"   Audio duration: {duration:.1f}s")
+        print(
+            f"   Chunks processed: {len(transcriptions) if transcriptions else 'None with transcription'}"
+        )
+        print(
+            f"   STT behavior: {'✅ Working' if transcriptions else '⚠️ No transcriptions (normal for synthetic audio)'}"
+        )
 
     except Exception as e:
         print(f"❌ Audio pipeline test failed: {e}")
@@ -290,53 +290,53 @@ async def benchmark_pipeline_performance():
         # Initialize services
         multimodal_service = await create_multimodal_service(gemini_key)
         async with await create_tts_service() as tts_service:
-            # Test different text lengths
-            test_cases = [
-                {"text": "Yes.", "type": "Short response"},
-                {
-                    "text": "I can help you with that programming question.",
-                    "type": "Medium response",
-                },
-                {
-                    "text": "I'd be happy to help you learn Python programming! Python is a great language for beginners because it has simple syntax and lots of learning resources available.",
-                    "type": "Long response",
-                },
-            ]
+        # Test different text lengths
+        test_cases = [
+            {"text": "Yes.", "type": "Short response"},
+            {
+                "text": "I can help you with that programming question.",
+                "type": "Medium response",
+            },
+            {
+                "text": "I'd be happy to help you learn Python programming! Python is a great language for beginners because it has simple syntax and lots of learning resources available.",
+                "type": "Long response",
+            },
+        ]
 
-            for test_case in test_cases:
-                print(f"\n🔄 Testing {test_case['type']}")
-                print(f"📝 Text: \"{test_case['text']}\"")
+        for test_case in test_cases:
+            print(f"\n🔄 Testing {test_case['type']}")
+            print(f"📝 Text: \"{test_case['text']}\"")
 
-                # Test multimodal processing
-                conv_input = ConversationInput(
-                    text="User question here",
-                    session_id="benchmark_session",
-                    timestamp=time.time(),
-                )
+            # Test multimodal processing
+            conv_input = ConversationInput(
+                text="User question here",
+                session_id="benchmark_session",
+                timestamp=time.time(),
+            )
 
-                multimodal_start = time.time()
-                # Simulate processing by using the response directly
-                multimodal_time = 0.5  # Simulate processing time
+            multimodal_start = time.time()
+            # Simulate processing by using the response directly
+            multimodal_time = 0.5  # Simulate processing time
 
-                # Test TTS processing
-                tts_start = time.time()
-                tts_request = TTSRequest(
-                    text=test_case["text"], session_id="benchmark_session"
-                )
+            # Test TTS processing
+            tts_start = time.time()
+            tts_request = TTSRequest(
+                text=test_case["text"], session_id="benchmark_session"
+            )
 
-                tts_response = await tts_service.synthesize_speech(tts_request)
-                tts_time = time.time() - tts_start
+            tts_response = await tts_service.synthesize_speech(tts_request)
+            tts_time = time.time() - tts_start
 
-                # Calculate metrics
-                efficiency = tts_response.duration / tts_time if tts_time > 0 else 0
+            # Calculate metrics
+            efficiency = tts_response.duration / tts_time if tts_time > 0 else 0
 
-                print(f"⏱️ Results:")
-                print(f"   TTS time: {tts_time:.1f}s")
-                print(f"   Audio duration: {tts_response.duration:.1f}s")
-                print(f"   Efficiency: {efficiency:.1f}x real-time")
-                print(f"   Performance: {'✅ Excellent' if efficiency > 1.0 else '⚠️ Slow'}")
+            print(f"⏱️ Results:")
+            print(f"   TTS time: {tts_time:.1f}s")
+            print(f"   Audio duration: {tts_response.duration:.1f}s")
+            print(f"   Efficiency: {efficiency:.1f}x real-time")
+            print(f"   Performance: {'✅ Excellent' if efficiency > 1.0 else '⚠️ Slow'}")
 
-            print(f"\n🏆 Benchmark Complete!")
+        print(f"\n🏆 Benchmark Complete!")
 
     except Exception as e:
         print(f"❌ Benchmark failed: {e}")
