@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
 
-interface UseVoiceAssistantProps {
+interface UseVoiceAgentProps {
   onStatusChange: (status: string) => void;
   sendMessage: (message: any) => void;
   isScreenSharing: boolean;
@@ -12,7 +12,7 @@ interface UseVoiceAssistantProps {
   enableVadScreenCapture?: boolean;
 }
 
-export const useVoiceAssistant = ({ 
+export const useVoiceAgent = ({ 
   onStatusChange, 
   sendMessage, 
   isScreenSharing,
@@ -22,7 +22,7 @@ export const useVoiceAssistant = ({
   onConnectionChange,
   captureScreen,
   enableVadScreenCapture = true
-}: UseVoiceAssistantProps) => {
+}: UseVoiceAgentProps) => {
   const [isVoiceActive, setIsVoiceActive] = useState<boolean>(false);
   const [speechDetected, setSpeechDetected] = useState<boolean>(false);
   const [audioEnergy, setAudioEnergy] = useState<number>(0);
@@ -218,10 +218,10 @@ export const useVoiceAssistant = ({
     }
   }, [sendMessage, enableVadScreenCapture, captureScreen, isScreenSharing]);
 
-  const toggleVoiceAssistant = useCallback(async () => {
+  const toggleVoiceAgent = useCallback(async () => {
     try {
       if (!isVoiceActive) {
-        // Start voice assistant - FIRST establish and verify WebSocket connection
+        // Start voice agent - FIRST establish and verify WebSocket connection
         onStatusChange("Connecting to server...");
         onConnectionChange(true);
 
@@ -275,7 +275,7 @@ export const useVoiceAssistant = ({
 
         // Send start message to backend BEFORE requesting microphone
         try {
-          console.log("Notifying backend of voice assistant start");
+          console.log("Notifying backend of voice agent start");
           sendMessage({
             type: "voice_assistant_start",
             timestamp: Date.now(),
@@ -300,7 +300,7 @@ export const useVoiceAssistant = ({
           console.log('✅ Microphone access granted, VAD started');
           
           setIsVoiceActive(true);
-          onStatusChange("🎤 Voice assistant ready - Start speaking!");
+          onStatusChange("🎤 Voice agent ready - Start speaking!");
           
           // Keep protection for a bit longer to prevent immediate disconnection
           // The VAD library might trigger some cleanup/re-initialization
@@ -321,8 +321,8 @@ export const useVoiceAssistant = ({
         }
 
       } else {
-        // Stop voice assistant
-        onStatusChange("Stopping voice assistant...");
+        // Stop voice agent
+        onStatusChange("Stopping voice agent...");
         
         if (vadInstanceRef.current) {
           try {
@@ -354,16 +354,31 @@ export const useVoiceAssistant = ({
         isInExtendedSilenceRef.current = false;
         lastSilenceNotificationRef.current = 0;
 
-        onStatusChange("Voice assistant stopped");
+        onStatusChange("Voice agent stopped");
 
         // Only close WebSocket if screen sharing is also inactive
         if (!isScreenSharing) {
+          console.log("🔌 Closing WebSocket connection (screen sharing also inactive)");
           onConnectionChange(false);
+        } else {
+          console.log("🔌 Keeping WebSocket connection (screen sharing still active)");
+          // Extra protection: Temporarily protect the connection during this transition
+          if (setProtectedOperation) {
+            console.log("🛡️ Protecting WebSocket during voice stop (screen sharing active)");
+            setProtectedOperation(true);
+            
+            setTimeout(() => {
+              if (setProtectedOperation) {
+                console.log("🔓 Removing WebSocket protection after voice stop");
+                setProtectedOperation(false);
+              }
+            }, 1500); // 1.5 second protection
+          }
         }
       }
     } catch (error) {
-      console.error("Voice assistant error:", error);
-      onStatusChange(`Voice assistant error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Voice agent error:", error);
+      onStatusChange(`Voice agent error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       
       // Clean up on error
       setIsVoiceActive(false);
@@ -387,23 +402,63 @@ export const useVoiceAssistant = ({
       
       // Only close WebSocket if screen sharing is also inactive
       if (!isScreenSharing) {
+        console.log("🔌 Closing WebSocket connection after error (screen sharing also inactive)");
         onConnectionChange(false);
+      } else {
+        console.log("🔌 Keeping WebSocket connection after error (screen sharing still active)");
+        // Extra protection: Temporarily protect the connection during error cleanup
+        if (setProtectedOperation) {
+          console.log("🛡️ Protecting WebSocket during voice error cleanup (screen sharing active)");
+          setProtectedOperation(true);
+          
+          setTimeout(() => {
+            if (setProtectedOperation) {
+              console.log("🔓 Removing WebSocket protection after voice error cleanup");
+              setProtectedOperation(false);
+            }
+          }, 2000); // 2 second protection
+        }
       }
     }
   }, [isVoiceActive, onConnectionChange, onStatusChange, sendMessage, isScreenSharing, initializeVAD, setProtectedOperation, isActuallyConnected, waitForConnection]);
 
   const cleanup = useCallback(async () => {
+    // Only cleanup VAD resources, do NOT affect connection state
     if (vadInstanceRef.current && isVoiceActive) {
       try {
+        console.log("🧹 Cleaning up VAD resources (preserving connection state)");
         vadInstanceRef.current.pause();
       } catch (error) {
-        console.error("Error during cleanup:", error);
+        console.error("Error during VAD cleanup:", error);
       }
     }
     // Clear accumulator
     audioAccumulatorRef.current = [];
     isAccumulatingRef.current = false;
-  }, [isVoiceActive]);
+    
+    // ENHANCED PROTECTION: Always protect during cleanup when voice is active
+    // This handles React state synchronization issues where screen sharing state might be stale
+    if (isVoiceActive && setProtectedOperation) {
+      console.log("🛡️ Protecting WebSocket during voice cleanup (voice active - preventing disconnection)");
+      console.log("📊 Voice agent cleanup: Applying protection due to active voice session");
+      setProtectedOperation(true);
+      
+      // Remove protection after cleanup period
+      setTimeout(() => {
+        if (setProtectedOperation) {
+          console.log("🔓 Removing WebSocket protection after voice cleanup");
+          console.log("📊 Voice agent cleanup protection expired");
+          setProtectedOperation(false);
+        }
+      }, 3000); // Increased to 3 seconds for better stability
+    } else {
+      console.log("📊 Voice agent cleanup: No protection needed (voice inactive)");
+    }
+    
+    // IMPORTANT: Do not call onConnectionChange here to avoid affecting screen sharing
+    // Connection management should only happen through toggleVoiceAgent
+    console.log("🧹 Voice agent cleanup completed (connection state preserved)");
+  }, [isVoiceActive, setProtectedOperation]);
 
   // Update audio energy based on VAD state for display purposes
   useEffect(() => {
@@ -418,7 +473,7 @@ export const useVoiceAssistant = ({
     isVoiceActive,
     speechDetected,
     audioEnergy,
-    toggleVoiceAssistant,
+    toggleVoiceAgent,
     cleanup,
   };
 }; 

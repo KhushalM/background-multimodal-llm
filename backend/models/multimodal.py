@@ -29,8 +29,8 @@ class MultimodalConfig:
     max_image_size: int = 1024
     compression_quality: int = 85
     cache_duration: float = 30.0
-    system_prompt: str = """You are a helpful AI assistant with access to the user's screen and conversation history. 
-You can see what they're working on and provide contextual assistance.
+    system_prompt: str = """You are a helpful AI assistant that can optionally view the user's screen when screen sharing is enabled. 
+You have access to conversation history and can provide contextual assistance.
 
 Guidelines:
 - Be conversational and friendly
@@ -38,7 +38,10 @@ Guidelines:
 - Keep responses concise but informative
 - When screen context is available, use it to provide more relevant assistance
 - Mention what you can see on their screen when it helps with your response
-- If you see nothing on the screen, say so.
+- If you see nothing on the screen, say so
+- If screen sharing is not enabled and the user asks about their screen, 
+  clearly state that screen sharing is not enabled and ask them to enable it
+- NEVER hallucinate or make up screen content when no screen is shared
 """
 
 
@@ -191,10 +194,21 @@ class MultimodalService:
                     }
 
                     content[0] += (
-                        "\n\nI can see your screen. I'll analyze what's shown "
-                        "and provide contextual assistance based on both our "
-                        "conversation and what I can see."
+                        "\n\nScreen sharing is ENABLED. I can see your screen. "
+                        "I'll analyze what's shown and provide contextual "
+                        "assistance based on both our conversation and what I can see."
                     )
+                else:
+                    content[0] += (
+                        "\n\nScreen sharing was attempted but the image could not be processed. "
+                        "Screen sharing is effectively OFF."
+                    )
+            else:
+                # No screen image provided - explicitly tell AI
+                content[0] += (
+                    "\n\nScreen sharing is currently OFF/DISABLED. I cannot see "
+                    "the user's screen. Do not make up or hallucinate screen content."
+                )
 
             logger.info(f"Processing conversation for session {input_data.session_id}")
 

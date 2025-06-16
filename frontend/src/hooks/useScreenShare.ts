@@ -127,7 +127,7 @@ export const useScreenShare = ({
           setIsScreenSharing(false);
           onStatusChange("Screen sharing stopped");
 
-          // Close WebSocket if voice assistant is also inactive
+          // Close WebSocket if voice agent is also inactive
           if (!isVoiceActive) {
             onConnectionChange(false);
           }
@@ -150,7 +150,7 @@ export const useScreenShare = ({
         setIsScreenSharing(false);
         onStatusChange("Screen sharing stopped");
 
-        // Close WebSocket if voice assistant is also inactive
+        // Close WebSocket if voice agent is also inactive
         if (!isVoiceActive) {
           onConnectionChange(false);
         }

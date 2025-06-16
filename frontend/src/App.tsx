@@ -7,7 +7,7 @@ import { ControlButtons } from "./components/ControlButtons";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useAudioPlayback } from "./hooks/useAudioPlayback";
 import { useScreenShare } from "./hooks/useScreenShare";
-import { useVoiceAssistant } from "./hooks/useVoiceAssistant";
+import { useVoiceAgent } from "./hooks/useVoiceAssistant";
 
 interface Message {
   id: string;
@@ -130,11 +130,27 @@ const App: React.FC = () => {
         connect();
         setKeepConnection(true);
       } else {
-        setKeepConnection(false);
-        disconnect();
+        // Add a small delay before disconnecting to handle React state synchronization
+        setTimeout(() => {
+          // Double-check current states before disconnecting
+          const currentVoice = isVoiceActive;
+          const currentScreen = isScreenSharing;
+          const stillShouldDisconnect = !currentVoice && !currentScreen;
+
+          console.log(
+            `Delayed disconnect check: voice=${currentVoice}, screen=${currentScreen}, disconnect=${stillShouldDisconnect}`
+          );
+
+          if (stillShouldDisconnect) {
+            setKeepConnection(false);
+            disconnect();
+          } else {
+            console.log("🛡️ Canceling disconnect - services still active");
+          }
+        }, 100); // Small delay for state synchronization
       }
     },
-    [connect, disconnect, setKeepConnection]
+    [connect, disconnect, setKeepConnection, isVoiceActive, isScreenSharing]
   );
 
   // Screen sharing hook with centralized connection management
@@ -161,14 +177,14 @@ const App: React.FC = () => {
     screenCaptureHandlerRef.current = handleScreenCaptureRequest;
   }, [handleScreenCaptureRequest]);
 
-  // Voice assistant hook with centralized connection management
+  // Voice agent hook with centralized connection management
   const {
     isVoiceActive: voiceActiveState,
     speechDetected,
     audioEnergy,
-    toggleVoiceAssistant,
+    toggleVoiceAgent,
     cleanup: cleanupVoice,
-  } = useVoiceAssistant({
+  } = useVoiceAgent({
     onStatusChange: setStatusMessage,
     sendMessage,
     isScreenSharing: isScreenSharing,
@@ -176,7 +192,7 @@ const App: React.FC = () => {
     isActuallyConnected,
     waitForConnection,
     onConnectionChange: (shouldConnect) => {
-      // This will be called when voice assistant starts/stops
+      // This will be called when voice agent starts/stops
       const newVoiceState = shouldConnect;
       setIsVoiceActive(newVoiceState);
       manageConnection(newVoiceState, isScreenSharing);
@@ -230,7 +246,7 @@ const App: React.FC = () => {
             isScreenSharing={isScreenSharing}
             isVoiceActive={isVoiceActive}
             onToggleScreenShare={toggleScreenShare}
-            onToggleVoiceAssistant={toggleVoiceAssistant}
+            onToggleVoiceAgent={toggleVoiceAgent}
           />
 
           {/* Enhanced Conversation Display */}

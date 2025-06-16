@@ -65,11 +65,10 @@ export const StatusDisplay: React.FC<StatusDisplayProps> = ({
         )}
       </HStack>
 
-      <Text fontSize="sm">
-        Status: {isScreenSharing && "Screen Sharing Active"}
-        {isVoiceActive && "Voice Assistant Active"}
-        {isAiSpeaking && "AI Speaking"}
-        {!isScreenSharing && !isVoiceActive && !isAiSpeaking && "Ready"}
+      <Text fontSize="sm" color="green.300">
+        {isScreenSharing && "Screen Sharing Active"}
+        {isScreenSharing && isVoiceActive && " • "}
+        {isVoiceActive && "Voice Agent Active"}
       </Text>
 
       <Text fontSize="xs">

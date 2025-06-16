@@ -148,8 +148,21 @@ class TTSService:
             self.vocoder = None
             self.speaker_embeddings = None
 
+    def _get_token_count(self, text: str) -> int:
+        """Estimate token count for the text"""
+        if self.processor:
+            try:
+                # Use the actual tokenizer for accurate count
+                inputs = self.processor(text=text, return_tensors="pt")
+                return inputs["input_ids"].shape[1]
+            except:
+                pass
+
+        # Fallback: rough estimate (1 token ≈ 4 characters)
+        return len(text) // 4
+
     def _preprocess_text(self, text: str) -> str:
-        """Clean and prepare text for TTS"""
+        """Clean and prepare text for TTS with token limit awareness"""
         # Remove or replace problematic characters
         text = text.strip()
 
@@ -168,12 +181,30 @@ class TTSService:
         for old, new in replacements.items():
             text = text.replace(old, new)
 
-        # Split very long texts into sentences for better processing
-        if len(text) > 500:
+        # SpeechT5 has a maximum token limit of 600 tokens
+        max_tokens = 550  # Leave some buffer
+
+        # Check token count and truncate if necessary
+        if self._get_token_count(text) > max_tokens:
             # Simple sentence splitting
             sentences = text.replace(". ", ".\n").split("\n")
-            # Take first few sentences to stay under limit
-            text = ". ".join(sentences[:3]) + "."
+
+            # Build text up to token limit
+            result_text = ""
+            for sentence in sentences:
+                test_text = result_text + sentence + ". "
+                if self._get_token_count(test_text) > max_tokens:
+                    break
+                result_text = test_text
+
+            # If we got at least one sentence, use it
+            if result_text.strip():
+                text = result_text.strip()
+            else:
+                # Fallback: truncate by characters
+                # Rough estimate: 550 tokens * 4 chars/token = 2200 chars
+                max_chars = 2200
+                text = text[:max_chars].rsplit(" ", 1)[0] + "."
 
         return text
 

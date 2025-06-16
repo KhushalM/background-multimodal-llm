@@ -5,14 +5,14 @@ interface ControlButtonsProps {
   isScreenSharing: boolean;
   isVoiceActive: boolean;
   onToggleScreenShare: () => void;
-  onToggleVoiceAssistant: () => void;
+  onToggleVoiceAgent: () => void;
 }
 
 export const ControlButtons: React.FC<ControlButtonsProps> = ({
   isScreenSharing,
   isVoiceActive,
   onToggleScreenShare,
-  onToggleVoiceAssistant,
+  onToggleVoiceAgent,
 }) => {
   return (
     <HStack gap={8} wrap="wrap" justify="center">
@@ -39,7 +39,7 @@ export const ControlButtons: React.FC<ControlButtonsProps> = ({
         size="lg"
         colorPalette={isVoiceActive ? "red" : "green"}
         variant={isVoiceActive ? "solid" : "outline"}
-        onClick={onToggleVoiceAssistant}
+        onClick={onToggleVoiceAgent}
         px={8}
         py={6}
         fontSize="lg"
@@ -51,8 +51,10 @@ export const ControlButtons: React.FC<ControlButtonsProps> = ({
         transition="all 0.2s"
         minW="200px"
       >
-        {isVoiceActive ? "🛑 Stop Voice" : "🎙️ Voice Assistant"}
+        {isVoiceActive ? "🛑 Stop Voice" : "🎙️ Voice Agent"}
       </Button>
     </HStack>
   );
 };
+
+export default ControlButtons;
