@@ -27,6 +27,10 @@ const App: React.FC = () => {
   const [currentTranscription, setCurrentTranscription] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
 
+  // Track the actual state of both services
+  const [isVoiceActive, setIsVoiceActive] = useState<boolean>(false);
+  const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false);
+
   // Audio playback hook
   const {
     isAiSpeaking,
@@ -114,9 +118,28 @@ const App: React.FC = () => {
     onStatusChange: setStatusMessage,
   });
 
-  // Screen sharing hook with smart capture
+  // Centralized connection management based on both service states
+  const manageConnection = useCallback(
+    (voiceActive: boolean, screenActive: boolean) => {
+      const shouldConnect = voiceActive || screenActive;
+      console.log(
+        `Connection management: voice=${voiceActive}, screen=${screenActive}, should=${shouldConnect}`
+      );
+
+      if (shouldConnect) {
+        connect();
+        setKeepConnection(true);
+      } else {
+        setKeepConnection(false);
+        disconnect();
+      }
+    },
+    [connect, disconnect, setKeepConnection]
+  );
+
+  // Screen sharing hook with centralized connection management
   const {
-    isScreenSharing,
+    isScreenSharing: screenSharingState,
     toggleScreenShare,
     captureScreen,
     cleanup: cleanupScreenShare,
@@ -124,14 +147,12 @@ const App: React.FC = () => {
   } = useScreenShare({
     onStatusChange: setStatusMessage,
     sendMessage,
-    isVoiceActive: false, // Will be updated by voice assistant
-    onConnectionChange: (shouldKeep) => {
-      setKeepConnection(shouldKeep);
-      if (shouldKeep) {
-        connect();
-      } else {
-        disconnect();
-      }
+    isVoiceActive: isVoiceActive,
+    onConnectionChange: (shouldConnect) => {
+      // This will be called when screen sharing starts/stops
+      const newScreenState = shouldConnect;
+      setIsScreenSharing(newScreenState);
+      manageConnection(isVoiceActive, newScreenState);
     },
   });
 
@@ -140,9 +161,9 @@ const App: React.FC = () => {
     screenCaptureHandlerRef.current = handleScreenCaptureRequest;
   }, [handleScreenCaptureRequest]);
 
-  // Voice assistant hook with smart screen capture
+  // Voice assistant hook with centralized connection management
   const {
-    isVoiceActive,
+    isVoiceActive: voiceActiveState,
     speechDetected,
     audioEnergy,
     toggleVoiceAssistant,
@@ -150,21 +171,28 @@ const App: React.FC = () => {
   } = useVoiceAssistant({
     onStatusChange: setStatusMessage,
     sendMessage,
-    isScreenSharing,
+    isScreenSharing: isScreenSharing,
     setProtectedOperation,
     isActuallyConnected,
     waitForConnection,
-    onConnectionChange: (shouldKeep) => {
-      setKeepConnection(shouldKeep);
-      if (shouldKeep) {
-        connect();
-      } else {
-        disconnect();
-      }
+    onConnectionChange: (shouldConnect) => {
+      // This will be called when voice assistant starts/stops
+      const newVoiceState = shouldConnect;
+      setIsVoiceActive(newVoiceState);
+      manageConnection(newVoiceState, isScreenSharing);
     },
     captureScreen, // Pass screen capture function for VAD-triggered capture
     enableVadScreenCapture: true, // Enable automatic screen capture on speech end
   });
+
+  // Keep local state in sync with hook states (backup synchronization)
+  useEffect(() => {
+    setIsScreenSharing(screenSharingState);
+  }, [screenSharingState]);
+
+  useEffect(() => {
+    setIsVoiceActive(voiceActiveState);
+  }, [voiceActiveState]);
 
   // Cleanup on component unmount
   useEffect(() => {

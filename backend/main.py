@@ -75,18 +75,25 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self.connection_attempts: Dict[WebSocket, int] = {}
+        # Track session states for each connection
+        self.session_states: Dict[WebSocket, Dict[str, Any]] = {}
         logger.info("ConnectionManager initialized")
 
     async def connect(self, websocket: WebSocket):
         try:
             logger.info(
-                f"Attempting to accept WebSocket connection from {websocket.client.host}"
+                f"Attempting to accept WebSocket connection from {websocket.client.host if websocket.client else 'unknown'}"
             )
             await websocket.accept()
             self.active_connections.append(websocket)
             self.connection_attempts[websocket] = 0
+            # Initialize session state
+            self.session_states[websocket] = {
+                "screen_share_on": False,
+                "voice_assistant_on": False,
+            }
             logger.info(
-                f"WebSocket connection accepted from {websocket.client.host}. Total connections: {len(self.active_connections)}"
+                f"WebSocket connection accepted from {websocket.client.host if websocket.client else 'unknown'}. Total connections: {len(self.active_connections)}"
             )
         except Exception as e:
             logger.error(f"Failed to accept WebSocket connection: {str(e)}")
@@ -98,11 +105,33 @@ class ConnectionManager:
                 self.active_connections.remove(websocket)
             if websocket in self.connection_attempts:
                 del self.connection_attempts[websocket]
+            if websocket in self.session_states:
+                del self.session_states[websocket]
             logger.info(
                 f"Client disconnected. Total connections: {len(self.active_connections)}"
             )
         except Exception as e:
             logger.error(f"Error disconnecting WebSocket: {e}")
+
+    def get_session_state(self, websocket: WebSocket) -> Dict[str, Any]:
+        """Get session state for a WebSocket connection"""
+        return self.session_states.get(
+            websocket,
+            {
+                "screen_share_on": False,
+                "voice_assistant_on": False,
+            },
+        )
+
+    def update_session_state(self, websocket: WebSocket, key: str, value: Any):
+        """Update session state for a WebSocket connection"""
+        if websocket not in self.session_states:
+            self.session_states[websocket] = {
+                "screen_share_on": False,
+                "voice_assistant_on": False,
+            }
+        self.session_states[websocket][key] = value
+        logger.debug(f"Updated session state: {key}={value}")
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
         try:
@@ -136,7 +165,7 @@ class ConnectionManager:
                     self.connection_attempts.get(connection, 0) + 1
                 )
                 if self.connection_attempts[connection] >= 3:
-                    logger.warning(f"Too many broadcast failures, disconnecting client")
+                    logger.warning("Too many broadcast failures, disconnecting client")
                     self.disconnect(connection)
 
 
@@ -300,11 +329,15 @@ async def handle_screen_share_start(websocket: WebSocket, message: Dict[str, Any
     """Handle screen sharing start event."""
     logger.info("Screen sharing started")
 
+    # Update session state
+    manager.update_session_state(websocket, "screen_share_on", True)
+
     # Send acknowledgment back to client
     response = {
         "type": "screen_share_started",
         "message": "Screen sharing session initiated",
         "timestamp": datetime.now().timestamp(),
+        "screen_share_on": True,
     }
 
     await manager.send_personal_message(json.dumps(response), websocket)
@@ -314,11 +347,15 @@ async def handle_screen_share_stop(websocket: WebSocket, message: Dict[str, Any]
     """Handle screen sharing stop event."""
     logger.info("Screen sharing stopped")
 
+    # Update session state
+    manager.update_session_state(websocket, "screen_share_on", False)
+
     # Send acknowledgment back to client
     response = {
         "type": "screen_share_stopped",
         "message": "Screen sharing session ended",
         "timestamp": datetime.now().timestamp(),
+        "screen_share_on": False,
     }
 
     await manager.send_personal_message(json.dumps(response), websocket)
@@ -327,6 +364,9 @@ async def handle_screen_share_stop(websocket: WebSocket, message: Dict[str, Any]
 async def handle_voice_assistant_start(websocket: WebSocket, message: Dict[str, Any]):
     """Handle voice assistant start event."""
     logger.info("Voice assistant started")
+
+    # Update session state
+    manager.update_session_state(websocket, "voice_assistant_on", True)
 
     # Send acknowledgment back to client
     response = {
@@ -341,6 +381,9 @@ async def handle_voice_assistant_start(websocket: WebSocket, message: Dict[str, 
 async def handle_voice_assistant_stop(websocket: WebSocket, message: Dict[str, Any]):
     """Handle voice assistant stop event."""
     logger.info("Voice assistant stopped")
+
+    # Update session state
+    manager.update_session_state(websocket, "voice_assistant_on", False)
 
     # Send acknowledgment back to client
     response = {
@@ -595,7 +638,10 @@ def check_text_for_screen_triggers(text: str) -> Dict[str, Any]:
 
 
 async def handle_transcription_with_screen_check(
-    websocket: WebSocket, text: str, timestamp: float, screen_image: str = None
+    websocket: WebSocket,
+    text: str,
+    timestamp: float,
+    screen_image: str = None,
 ):
     """Handle transcription and check if we need screen capture before multimodal processing"""
 
@@ -607,8 +653,21 @@ async def handle_transcription_with_screen_check(
         await process_with_multimodal_llm(websocket, text, timestamp, screen_image)
         return
 
+    # Get session state to check if screen sharing is active
+    session_state = manager.get_session_state(websocket)
+    screen_share_on = session_state.get("screen_share_on", False)
+
     # Check if the text contains trigger words that would benefit from screen capture
-    needs_screen_capture = check_text_for_screen_triggers(text)
+    if screen_share_on:
+        needs_screen_capture = check_text_for_screen_triggers(text)
+    else:
+        needs_screen_capture = {
+            "should_capture": False,
+            "confidence": 0.0,
+            "reason": "screen_share_off",
+        }
+    logger.info(f"Screen share on: {screen_share_on}")
+    logger.info(f"Needs screen capture: {needs_screen_capture}")
 
     if (
         needs_screen_capture["should_capture"]
@@ -672,7 +731,10 @@ async def handle_screen_capture_response(websocket: WebSocket, message: Dict[str
 
 
 async def process_with_multimodal_llm(
-    websocket: WebSocket, text: str, timestamp: float, screen_image: str = None
+    websocket: WebSocket,
+    text: str,
+    timestamp: float,
+    screen_image: str = None,
 ):
     """Process transcribed text with the multimodal LLM (with optional screen context)"""
     try:
