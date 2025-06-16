@@ -27,14 +27,24 @@ echo "Platform: $(uname -m)"
 echo "Python: $(python --version 2>/dev/null || echo 'Not available')"
 echo "Node.js: $(node --version 2>/dev/null || echo 'Not available')"
 
-# Install Python dependencies
-print_info "Installing Python dependencies..."
-pip install --upgrade pip setuptools wheel
+# Install Python dependencies using uv for faster installation
+print_info "Installing Python dependencies using uv..."
+pip install --upgrade pip setuptools wheel uv
 
-if pip install -r requirements.txt; then
-    print_status "Dependencies installed successfully"
+# Install from pyproject.toml if available, otherwise fall back to requirements.txt
+if [ -f "backend/pyproject.toml" ]; then
+    print_info "Installing from pyproject.toml (modern Python packaging)..."
+    cd backend && uv pip install -e . && cd ..
+    print_status "Dependencies installed from pyproject.toml"
+elif [ -f "requirements.txt" ]; then
+    print_info "Installing from requirements.txt..."
+    if uv pip install -r requirements.txt; then
+        print_status "Dependencies installed from requirements.txt"
+    else
+        print_warning "Some dependencies may have failed. Check output above."
+    fi
 else
-    print_warning "Some dependencies may have failed. Check output above."
+    print_warning "No requirements.txt or pyproject.toml found"
 fi
 
 # Create simple project structure
@@ -129,10 +139,10 @@ EOF
 
 # Install frontend dependencies if npm is available
 if command -v npm &> /dev/null; then
-    print_info "Installing frontend dependencies..."
+    print_info "Installing frontend dependencies (includes VAD libraries for voice detection)..."
     if [ -f "frontend/package.json" ]; then
         cd frontend && npm install && cd ..
-        print_status "Frontend dependencies installed"
+        print_status "Frontend dependencies installed (React, TypeScript, Chakra UI, VAD libraries)"
     else
         print_warning "Frontend package.json not found - skipping npm install"
     fi
@@ -151,7 +161,7 @@ echo "  Frontend (Vite): http://localhost:3000"
 echo "  Backend (FastAPI): http://localhost:8000"
 echo ""
 print_info "📂 Project Structure:"
-echo "  frontend/: React + TypeScript + Vite + Chakra UI"
+echo "  frontend/: React + TypeScript + Vite + Chakra UI + VAD"
 echo "  backend/: FastAPI server with multimodal AI"
 echo "  data/: Local data storage"
 echo ""
@@ -159,5 +169,7 @@ print_info "💡 Development Tips:"
 echo "  • Frontend: Always run 'npm run dev' from frontend/ directory"
 echo "  • Backend: Run 'python main.py' from backend/ directory"
 echo "  • Use 'npm run build' to create production build"
+echo "  • Voice Activity Detection: Integrated with @ricky0123/vad-react"
+echo "  • Package management: Use 'uv' for faster Python installs"
 echo ""
 print_status "Ready to build your AI assistant! 🤖" 

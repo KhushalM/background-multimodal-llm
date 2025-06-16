@@ -53,11 +53,12 @@ RUN git lfs install --system
 
 
 
-# Upgrade pip and install essential Python packages
+# Upgrade pip and install essential Python packages including uv for faster package management
 RUN pip3 install --no-cache-dir --upgrade \
     pip \
     setuptools \
-    wheel
+    wheel \
+    uv
 
 # Note: No need to install PyTorch since we use cloud inference APIs
 # This saves ~1GB+ in container size and faster startup
@@ -96,8 +97,8 @@ ENV PATH="/home/$USERNAME/.local/bin:$PATH"
 ENV PYTHONPATH="/workspaces/background-multimodal-llm"
 ENV DEVELOPMENT_MODE=cloud
 
-# Pre-install core packages for multimodal AI assistant
-RUN pip3 install --user --no-cache-dir \
+# Pre-install core packages for multimodal AI assistant using uv for faster installation
+RUN uv pip install --user --no-cache-dir \
     # Backend API framework
     fastapi>=0.104.0 \
     "uvicorn[standard]>=0.24.0" \
