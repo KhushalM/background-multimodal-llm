@@ -1,17 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
-import {
-  Box,
-  Button,
-  Flex,
-  Heading,
-  VStack,
-  HStack,
-  Badge,
-  Text,
-  Container,
-} from "@chakra-ui/react";
-import { ConversationDisplay } from "./components/ConversationDisplay";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { Container, Flex, VStack, Heading, Text } from "@chakra-ui/react";
+
 import { StatusDisplay } from "./components/StatusDisplay";
+import { ConversationDisplay } from "./components/ConversationDisplay";
 import { ControlButtons } from "./components/ControlButtons";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useAudioPlayback } from "./hooks/useAudioPlayback";
@@ -42,6 +33,9 @@ const App: React.FC = () => {
     playAudioResponse,
     cleanup: cleanupAudio,
   } = useAudioPlayback();
+
+  // Create a ref for the screen capture handler
+  const screenCaptureHandlerRef = useRef<((data: any) => void) | null>(null);
 
   // WebSocket message handler
   const handleWebSocketMessage = useCallback(
@@ -87,6 +81,17 @@ const App: React.FC = () => {
       } else if (data.type === "speech_active") {
         // Speech is being accumulated
         setStatusMessage("🎤 Listening... (speech detected)");
+      } else if (data.type === "screen_capture_request") {
+        // Handle screen capture request
+        setStatusMessage(`Screen capture requested: ${data.reason}`);
+
+        if (screenCaptureHandlerRef.current) {
+          screenCaptureHandlerRef.current(data);
+        } else {
+          setStatusMessage(
+            "Screen capture requested but screen sharing not active"
+          );
+        }
       } else if (data.type === "error") {
         setStatusMessage(`Error: ${data.message}`);
       }
@@ -109,15 +114,17 @@ const App: React.FC = () => {
     onStatusChange: setStatusMessage,
   });
 
-  // Screen sharing hook
+  // Screen sharing hook with smart capture
   const {
     isScreenSharing,
     toggleScreenShare,
+    captureScreen,
     cleanup: cleanupScreenShare,
+    handleScreenCaptureRequest,
   } = useScreenShare({
     onStatusChange: setStatusMessage,
     sendMessage,
-    isVoiceActive: false, // Will be updated below
+    isVoiceActive: false, // Will be updated by voice assistant
     onConnectionChange: (shouldKeep) => {
       setKeepConnection(shouldKeep);
       if (shouldKeep) {
@@ -128,7 +135,12 @@ const App: React.FC = () => {
     },
   });
 
-  // Voice assistant hook
+  // Update the ref with the handler
+  useEffect(() => {
+    screenCaptureHandlerRef.current = handleScreenCaptureRequest;
+  }, [handleScreenCaptureRequest]);
+
+  // Voice assistant hook with smart screen capture
   const {
     isVoiceActive,
     speechDetected,
@@ -150,12 +162,9 @@ const App: React.FC = () => {
         disconnect();
       }
     },
+    captureScreen, // Pass screen capture function for VAD-triggered capture
+    enableVadScreenCapture: true, // Enable automatic screen capture on speech end
   });
-
-  // Update screen share hook with current voice state
-  const handleToggleScreenShare = useCallback(() => {
-    toggleScreenShare();
-  }, [toggleScreenShare]);
 
   // Cleanup on component unmount
   useEffect(() => {
@@ -192,7 +201,7 @@ const App: React.FC = () => {
           <ControlButtons
             isScreenSharing={isScreenSharing}
             isVoiceActive={isVoiceActive}
-            onToggleScreenShare={handleToggleScreenShare}
+            onToggleScreenShare={toggleScreenShare}
             onToggleVoiceAssistant={toggleVoiceAssistant}
           />
 

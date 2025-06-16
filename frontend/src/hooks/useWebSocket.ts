@@ -9,9 +9,10 @@ interface UseWebSocketProps {
   onMessage: (data: WebSocketMessage) => void;
   onConnectionChange: (isConnected: boolean) => void;
   onStatusChange: (status: string) => void;
+  onScreenCaptureRequest?: (data: any) => void;
 }
 
-export const useWebSocket = ({ onMessage, onConnectionChange, onStatusChange }: UseWebSocketProps) => {
+export const useWebSocket = ({ onMessage, onConnectionChange, onStatusChange, onScreenCaptureRequest }: UseWebSocketProps) => {
   const wsRef = useRef<WebSocket | null>(null);
   const shouldKeepConnectionRef = useRef(false);
   const isConnectingRef = useRef(false);
@@ -134,7 +135,13 @@ export const useWebSocket = ({ onMessage, onConnectionChange, onStatusChange }: 
       try {
         const data = JSON.parse(event.data);
         console.log("Received message:", data);
-        onMessage(data);
+        
+        // Handle screen capture requests
+        if (data.type === "screen_capture_request" && onScreenCaptureRequest) {
+          onScreenCaptureRequest(data);
+        } else {
+          onMessage(data);
+        }
       } catch (error) {
         console.error("Error processing message:", error);
       }
@@ -146,7 +153,7 @@ export const useWebSocket = ({ onMessage, onConnectionChange, onStatusChange }: 
         ws.close(1000, "Component unmounting");
       }
     };
-  }, [onMessage, onConnectionChange, onStatusChange]);
+  }, [onMessage, onConnectionChange, onStatusChange, onScreenCaptureRequest]);
 
   const sendMessage = useCallback((message: any) => {
     const readyState = wsRef.current?.readyState;

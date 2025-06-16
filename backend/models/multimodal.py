@@ -85,12 +85,127 @@ class MultimodalService:
         # Screen context cache
         self.screen_cache: Dict[str, Any] = {}
 
+        # Screen capture trigger configuration
+        self.screen_trigger_words = [
+            "screen",
+            "display",
+            "monitor",
+            "window",
+            "interface",
+            "ui",
+            "gui",
+            "desktop",
+            "browser",
+            "page",
+            "app",
+            "what do you see",
+            "look at",
+            "help with this",
+            "current",
+            "this page",
+            "this app",
+            "error",
+            "issue",
+            "problem",
+            "not working",
+            "broken",
+            "show",
+            "showing",
+        ]
+
+        self.screen_context_phrases = [
+            "what do you see",
+            "what's on",
+            "what am i",
+            "help with this",
+            "look at",
+            "see this",
+            "current",
+            "this page",
+            "this app",
+            "error",
+            "issue",
+            "problem",
+            "not working",
+            "broken",
+            "can you help",
+            "how do i",
+            "what should i",
+            "where is",
+        ]
+
+        self.question_indicators = [
+            "what",
+            "how",
+            "where",
+            "why",
+            "which",
+            "can you",
+            "could you",
+            "would you",
+            "should i",
+            "do i",
+            "am i",
+            "is this",
+        ]
+
     def _get_or_create_memory(self, session_id: str) -> List[Dict[str, Any]]:
         """Get or create memory for a session"""
         if session_id not in self.session_memories:
             self.session_memories[session_id] = []
             logger.info(f"Created new memory for session: {session_id}")
         return self.session_memories[session_id]
+
+    def _should_capture_screen(self, text: str) -> Dict[str, Any]:
+        """Analyze text to determine if screen capture would be helpful"""
+        text_lower = text.lower().strip()
+
+        # Check for explicit trigger words
+        trigger_matches = [
+            word for word in self.screen_trigger_words if word in text_lower
+        ]
+        trigger_detected = len(trigger_matches) > 0
+
+        # Check for screen-related context phrases
+        context_matches = [
+            phrase for phrase in self.screen_context_phrases if phrase in text_lower
+        ]
+        context_detected = len(context_matches) > 0
+
+        # Check for question patterns that often need visual context
+        question_matches = [
+            word for word in self.question_indicators if text_lower.startswith(word)
+        ]
+        question_detected = len(question_matches) > 0
+
+        # Calculate confidence based on matches
+        confidence = 0.0
+        reason = "none"
+
+        if trigger_detected:
+            confidence = 0.9
+            reason = "explicit_trigger"
+        elif context_detected and question_detected:
+            confidence = 0.8
+            reason = "context_question"
+        elif context_detected:
+            confidence = 0.6
+            reason = "context_phrase"
+        elif question_detected and len(text_lower.split()) > 3:
+            confidence = 0.4
+            reason = "complex_question"
+
+        should_capture = confidence >= 0.6
+
+        return {
+            "should_capture": should_capture,
+            "confidence": confidence,
+            "reason": reason,
+            "trigger_matches": trigger_matches,
+            "context_matches": context_matches,
+            "question_matches": question_matches,
+            "text_length": len(text_lower.split()),
+        }
 
     def _decode_image(self, base64_data: str) -> Optional[Image.Image]:
         """Decode base64 image data"""
@@ -153,7 +268,7 @@ class MultimodalService:
     async def process_conversation(
         self, input_data: ConversationInput
     ) -> ConversationResponse:
-        """Process a conversation turn with optional screen context"""
+        """Process a conversation turn with intelligent screen context"""
         start_time = time.time()
 
         try:
@@ -166,6 +281,9 @@ class MultimodalService:
                     session_id=input_data.session_id,
                 )
 
+            # Analyze if screen capture would be helpful
+            screen_analysis = self._should_capture_screen(input_data.text)
+
             # Build conversation context
             context_parts = self._build_conversation_context(
                 input_data.session_id, input_data.text
@@ -174,32 +292,57 @@ class MultimodalService:
             # Prepare content for Gemini (text + optional image)
             content = ["\n".join(context_parts)]
 
-            # Add screen image if provided
+            # Handle screen image - either provided or recommend capture
             screen_context_data = None
-            logger.info(f"Screen image: {input_data.screen_image}")
+            image_used = False
+
             if input_data.screen_image:
+                # Screen image was provided - use it
                 image = self._decode_image(input_data.screen_image)
-                logger.info(f"Screen image: {image}")
                 if image:
-                    # Resize if necessary
                     image = self._resize_image(image)
                     content.append(image)
-                    logger.info(f"Screen image size: {image.size}")
+                    image_used = True
+
                     screen_context_data = {
                         "has_screen_context": True,
                         "image_size": image.size,
+                        "capture_method": "provided",
                     }
 
-                    # Add screen context instruction
                     content[0] += (
-                        "\n\nI can see your screen. Please analyze "
-                        "what's shown and provide contextual assistance "
-                        "based on both the conversation and what you see."
+                        "\n\nI can see your screen. I'll analyze what's shown "
+                        "and provide contextual assistance based on both our "
+                        "conversation and what I can see."
+                    )
+
+            elif screen_analysis["should_capture"]:
+                # Recommend screen capture to frontend
+                screen_context_data = {
+                    "needs_screen_capture": True,
+                    "capture_confidence": screen_analysis["confidence"],
+                    "capture_reason": screen_analysis["reason"],
+                    "trigger_matches": screen_analysis["trigger_matches"],
+                    "context_matches": screen_analysis["context_matches"],
+                }
+
+                # Adjust response based on confidence level
+                if screen_analysis["confidence"] >= 0.8:
+                    content[0] += (
+                        "\n\nNote: This request would benefit from screen context. "
+                        "I'll provide the best answer I can, but seeing your screen "
+                        "would help me give more specific assistance."
                     )
 
             logger.info(f"Processing conversation for session {input_data.session_id}")
-            if screen_context_data:
-                logger.info("Screen context included in request")
+
+            if input_data.screen_image:
+                logger.info("Screen context provided in request")
+            elif screen_analysis["should_capture"]:
+                logger.info(
+                    f"Screen capture recommended: {screen_analysis['reason']} "
+                    f"(confidence: {screen_analysis['confidence']:.2f})"
+                )
 
             # Generate response using single multimodal call
             response = await asyncio.get_event_loop().run_in_executor(
@@ -220,6 +363,7 @@ class MultimodalService:
                     "content": input_data.text,
                     "timestamp": input_data.timestamp,
                     "has_screen": bool(input_data.screen_image),
+                    "screen_analysis": screen_analysis,
                 }
             )
             memory.append(

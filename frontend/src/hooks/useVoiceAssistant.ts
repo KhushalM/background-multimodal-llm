@@ -8,6 +8,8 @@ interface UseVoiceAssistantProps {
   isActuallyConnected?: () => boolean;
   waitForConnection?: (timeoutMs?: number) => Promise<boolean>;
   onConnectionChange: (shouldKeep: boolean) => void;
+  captureScreen?: () => Promise<string | null>;
+  enableVadScreenCapture?: boolean;
 }
 
 export const useVoiceAssistant = ({ 
@@ -17,7 +19,9 @@ export const useVoiceAssistant = ({
   setProtectedOperation,
   isActuallyConnected,
   waitForConnection, 
-  onConnectionChange 
+  onConnectionChange,
+  captureScreen,
+  enableVadScreenCapture = true
 }: UseVoiceAssistantProps) => {
   const [isVoiceActive, setIsVoiceActive] = useState<boolean>(false);
   const [speechDetected, setSpeechDetected] = useState<boolean>(false);
@@ -98,7 +102,7 @@ export const useVoiceAssistant = ({
           sendSpeechStart();
         },
         
-        onSpeechEnd: (audio: Float32Array) => {
+        onSpeechEnd: async (audio: Float32Array) => {
           console.log('🔇 Speech ended - processing accumulated audio', `Final chunk: ${audio.length} samples`);
           setSpeechDetected(false);
           isAccumulatingRef.current = false;
@@ -124,13 +128,30 @@ export const useVoiceAssistant = ({
               offset += chunk.length;
             }
             
-            // Send the complete accumulated audio
+            // Capture screen if VAD-triggered capture is enabled
+            let screenImage = null;
+            if (enableVadScreenCapture && captureScreen && isScreenSharing) {
+              try {
+                console.log('📸 Capturing screen for VAD-triggered analysis...');
+                screenImage = await captureScreen();
+                if (screenImage) {
+                  console.log('✅ Screen captured for VAD analysis');
+                } else {
+                  console.warn('⚠️ Failed to capture screen for VAD analysis');
+                }
+              } catch (error) {
+                console.error('Error capturing screen for VAD:', error);
+              }
+            }
+
+            // Send the complete accumulated audio with optional screen context
             try {
               sendMessage({
                 type: "audio_data",
                 data: Array.from(combinedAudio),
                 sample_rate: 16000,
                 timestamp: currentTime,
+                screen_image: screenImage, // Include screen capture if available
                 vad: {
                   isSpeaking: false,  // This tells backend to complete the session
                   energy: 0.1,
@@ -138,7 +159,8 @@ export const useVoiceAssistant = ({
                 },
               });
               
-              console.log(`✅ Sent complete audio session: ${combinedAudio.length} samples`);
+              const captureStatus = screenImage ? ' with screen context' : '';
+              console.log(`✅ Sent complete audio session: ${combinedAudio.length} samples${captureStatus}`);
             } catch (error) {
               console.warn('Failed to send audio data:', error);
             }
@@ -194,7 +216,7 @@ export const useVoiceAssistant = ({
       console.error('Failed to initialize VAD:', error);
       throw error;
     }
-  }, [sendMessage]);
+  }, [sendMessage, enableVadScreenCapture, captureScreen, isScreenSharing]);
 
   const toggleVoiceAssistant = useCallback(async () => {
     try {

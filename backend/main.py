@@ -8,6 +8,7 @@ import json
 import logging
 from typing import Dict, List, Any
 from datetime import datetime
+import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -240,6 +241,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     logger.debug("Handling VAD state update")
                     await handle_vad_state(websocket, message)
 
+                elif message_type == "screen_capture_response":
+                    logger.info("Handling screen capture response")
+                    await handle_screen_capture_response(websocket, message)
+
                 elif message_type == "heartbeat":
                     logger.debug("Received heartbeat, sending pong")
                     await manager.send_personal_message(
@@ -394,8 +399,8 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
 
                 await manager.send_personal_message(json.dumps(response), websocket)
 
-                # Send transcription to multimodal LLM for processing (with optional screen context)
-                await process_with_multimodal_llm(
+                # Use new flow that checks for screen triggers first
+                await handle_transcription_with_screen_check(
                     websocket, transcription.text, transcription.timestamp, screen_image
                 )
 
@@ -465,8 +470,8 @@ async def handle_vad_state(websocket: WebSocket, message: Dict[str, Any]):
 
                 await manager.send_personal_message(json.dumps(response), websocket)
 
-                # Send transcription to multimodal LLM for processing
-                await process_with_multimodal_llm(
+                # Use new flow that checks for screen triggers first
+                await handle_transcription_with_screen_check(
                     websocket, transcription.text, transcription.timestamp
                 )
 
@@ -484,6 +489,186 @@ async def handle_vad_state(websocket: WebSocket, message: Dict[str, Any]):
         }
 
         await manager.send_personal_message(json.dumps(response), websocket)
+
+
+def check_text_for_screen_triggers(text: str) -> Dict[str, Any]:
+    """Check if text contains triggers that would benefit from screen capture"""
+    text_lower = text.lower()
+
+    # Explicit screen-related trigger words
+    explicit_triggers = [
+        "screen",
+        "display",
+        "see",
+        "look",
+        "show",
+        "what's on",
+        "what is on",
+        "current page",
+        "this page",
+        "this screen",
+        "my screen",
+        "the screen",
+        "what am i",
+        "where am i",
+        "help with this",
+        "help me with this",
+        "what do you see",
+        "can you see",
+        "describe",
+        "read this",
+    ]
+
+    # Context words that suggest user needs help with current content
+    context_words = [
+        "error",
+        "issue",
+        "problem",
+        "bug",
+        "broken",
+        "not working",
+        "help",
+        "stuck",
+        "confused",
+        "understand",
+        "explain",
+        "debug",
+        "fix",
+    ]
+
+    # Question indicators that often pair with screen context
+    question_indicators = [
+        "what",
+        "how",
+        "where",
+        "why",
+        "which",
+        "when",
+        "can you",
+        "could you",
+        "would you",
+        "should i",
+        "do i",
+        "am i",
+        "is this",
+    ]
+
+    # Find matches
+    trigger_matches = [
+        trigger for trigger in explicit_triggers if trigger in text_lower
+    ]
+    context_matches = [word for word in context_words if word in text_lower]
+    question_matches = [
+        q
+        for q in question_indicators
+        if text_lower.startswith(q) or f" {q}" in text_lower
+    ]
+
+    # Calculate confidence based on matches
+    confidence = 0.0
+    reason = "no_triggers"
+
+    if trigger_matches:
+        confidence = 0.9
+        reason = "explicit_trigger"
+    elif context_matches and question_matches:
+        confidence = 0.8
+        reason = "context_question"
+    elif context_matches and len(text_lower.split()) > 3:
+        confidence = 0.6
+        reason = "context_phrase"
+    elif question_matches and len(text_lower.split()) > 4:
+        confidence = 0.5
+        reason = "general_question"
+
+    should_capture = confidence >= 0.6
+
+    return {
+        "should_capture": should_capture,
+        "confidence": confidence,
+        "reason": reason,
+        "trigger_matches": trigger_matches,
+        "context_matches": context_matches,
+        "question_matches": question_matches,
+        "text_length": len(text_lower.split()),
+    }
+
+
+async def handle_transcription_with_screen_check(
+    websocket: WebSocket, text: str, timestamp: float, screen_image: str = None
+):
+    """Handle transcription and check if we need screen capture before multimodal processing"""
+
+    # First check if we already have a screen image
+    if screen_image:
+        logger.info(
+            "Screen image already provided, proceeding to multimodal processing"
+        )
+        await process_with_multimodal_llm(websocket, text, timestamp, screen_image)
+        return
+
+    # Check if the text contains trigger words that would benefit from screen capture
+    needs_screen_capture = check_text_for_screen_triggers(text)
+
+    if (
+        needs_screen_capture["should_capture"]
+        and needs_screen_capture["confidence"] >= 0.6
+    ):
+        logger.info(
+            f"Screen capture recommended for text: '{text}' (confidence: {needs_screen_capture['confidence']:.2f})"
+        )
+
+        # Send screen capture request to frontend and store the context for later
+        screen_request = {
+            "type": "screen_capture_request",
+            "confidence": needs_screen_capture["confidence"],
+            "reason": needs_screen_capture["reason"],
+            "trigger_matches": needs_screen_capture["trigger_matches"],
+            "context_matches": needs_screen_capture["context_matches"],
+            "timestamp": datetime.now().timestamp(),
+            "original_text": text,
+            "original_timestamp": timestamp,
+        }
+
+        logger.info(
+            f"Requesting screen capture: {needs_screen_capture['reason']} (confidence: {needs_screen_capture['confidence']:.2f})"
+        )
+        await manager.send_personal_message(json.dumps(screen_request), websocket)
+
+        # Don't process with multimodal LLM yet - wait for screen capture response
+        return
+    else:
+        # No screen capture needed, proceed with text-only processing
+        logger.info("No screen capture needed, proceeding with text-only processing")
+        await process_with_multimodal_llm(websocket, text, timestamp, None)
+
+
+async def handle_screen_capture_response(websocket: WebSocket, message: Dict[str, Any]):
+    """Handle screen capture response from frontend"""
+    screen_image = message.get("screen_image")
+    original_text = message.get("original_text", "")
+    request_data = message.get("request_data", {})
+    original_timestamp = request_data.get("original_timestamp")
+    if not original_timestamp:
+        original_timestamp = message.get("timestamp", time.time())
+
+    logger.info(
+        f"Screen capture response - has image: {bool(screen_image)}, "
+        f"original_text: '{original_text}', message keys: {list(message.keys())}"
+    )
+
+    if screen_image and original_text:
+        logger.info("Received screen capture, processing with visual context")
+
+        # Process with the original transcription timestamp for proper session continuity
+        await process_with_multimodal_llm(
+            websocket, original_text, original_timestamp, screen_image
+        )
+    else:
+        logger.warning(
+            f"Invalid screen capture response - screen_image present: "
+            f"{bool(screen_image)}, original_text: '{original_text}'"
+        )
 
 
 async def process_with_multimodal_llm(
@@ -526,7 +711,10 @@ async def process_with_multimodal_llm(
 
         logger.info(f"AI Response: {ai_response.text}")
 
-        # Send AI response back to client (including screen context if available)
+        # Screen capture requests are now handled before calling this function
+        # so we don't need to handle them here anymore
+
+        # Send AI response back to client
         response = {
             "type": "ai_response",
             "text": ai_response.text,
