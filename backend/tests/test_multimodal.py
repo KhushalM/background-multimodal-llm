@@ -102,9 +102,7 @@ async def test_multimodal_service():
             if summary:
                 print(f"📋 Summary: {summary}")
             else:
-                print(
-                    "📋 No summary available yet (summary created after longer conversations)"
-                )
+                print("📋 No summary available yet (summary created after longer conversations)")
 
         # Test active sessions
         active_sessions = multimodal_service.get_active_sessions()
@@ -181,26 +179,16 @@ async def test_screen_context_integration():
             screen_image=test_image,
         )
 
-        response_with_screen = await service.process_conversation(
-            conv_input_with_screen
-        )
+        response_with_screen = await service.process_conversation(conv_input_with_screen)
         print(f"🤖 AI: {response_with_screen.text[:100]}...")
         print(f"🖼️ Screen context: {response_with_screen.screen_context is not None}")
 
         if response_with_screen.screen_context:
             print(f"📋 Screen analysis:")
-            print(
-                f"   Description: {response_with_screen.screen_context.get('description', 'N/A')}"
-            )
-            print(
-                f"   Context type: {response_with_screen.screen_context.get('context_type', 'N/A')}"
-            )
-            print(
-                f"   Confidence: {response_with_screen.screen_context.get('confidence', 0):.1%}"
-            )
-            print(
-                f"   Elements: {response_with_screen.screen_context.get('elements', [])}"
-            )
+            print(f"   Description: {response_with_screen.screen_context.get('description', 'N/A')}")
+            print(f"   Context type: {response_with_screen.screen_context.get('context_type', 'N/A')}")
+            print(f"   Confidence: {response_with_screen.screen_context.get('confidence', 0):.1%}")
+            print(f"   Elements: {response_with_screen.screen_context.get('elements', [])}")
 
         # Test caching
         print("\n📝 Test 3: Testing screen analysis caching")
@@ -217,9 +205,7 @@ async def test_screen_context_integration():
         processing_time = time.time() - start_time
 
         print(f"🤖 AI: {response_cached.text[:100]}...")
-        print(
-            f"⏱️ Processing time: {processing_time:.2f}s (should be faster due to caching)"
-        )
+        print(f"⏱️ Processing time: {processing_time:.2f}s (should be faster due to caching)")
 
         # Clear cache
         print("\n🧹 Testing cache management...")
@@ -295,9 +281,7 @@ async def test_conversation_flow():
                 context={
                     "time_info": time.strftime("%Y-%m-%d %H:%M:%S"),
                     "app_info": "VS Code",
-                    "screen_info": (
-                        "Programming tutorial open" if message["screen_image"] else None
-                    ),
+                    "screen_info": ("Programming tutorial open" if message["screen_image"] else None),
                 },
                 screen_image=message["screen_image"],
             )
@@ -306,15 +290,11 @@ async def test_conversation_flow():
             print(f"🤖 AI: {response.text}")
 
             if response.screen_context:
-                print(
-                    f"🔍 Screen context used: {response.screen_context.get('context_type', 'unknown')}"
-                )
+                print(f"🔍 Screen context used: {response.screen_context.get('context_type', 'unknown')}")
 
             await asyncio.sleep(1)
 
-        print(
-            f"\n📚 Final conversation history length: {len(service.get_conversation_history(session_id))}"
-        )
+        print(f"\n📚 Final conversation history length: {len(service.get_conversation_history(session_id))}")
 
         print("\n✅ Realistic conversation flow test completed!")
 
