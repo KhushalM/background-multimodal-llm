@@ -40,6 +40,12 @@
                 "terminal.integrated.defaultProfile.linux": "bash",
                 "python.analysis.typeCheckingMode": "basic",
                 "python.analysis.autoImportCompletions": true,
+                // Python formatting settings - remove 79 character limit
+                "python.formatting.provider": "black",
+                "black-formatter.args": ["--line-length", "200"],
+                "python.linting.flake8Args": ["--max-line-length=200"],
+                "python.linting.pylintArgs": ["--max-line-length=200"],
+                "isort.args": ["--line-length", "200"],
                 // TypeScript settings
                 "typescript.preferences.includePackageJsonAutoImports": "auto",
                 "typescript.suggest.autoImports": true,

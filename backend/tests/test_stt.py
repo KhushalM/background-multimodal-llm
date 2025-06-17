@@ -4,8 +4,12 @@ Test script for STT service
 """
 import asyncio
 import os
+import sys
 import numpy as np
 from dotenv import load_dotenv
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from models.STT import create_stt_service, AudioChunk
 
@@ -21,7 +25,7 @@ async def test_stt_service():
     try:
         # Create STT service (no token needed for local pipeline)
         async with await create_stt_service() as stt_service:
-        print("✅ STT Service created successfully")
+            print("✅ STT Service created successfully")
 
         # Generate synthetic audio (sine wave - represents speech)
         sample_rate = 16000
@@ -35,9 +39,7 @@ async def test_stt_service():
         noise = 0.05 * np.random.normal(0, 1, len(audio_data))
         audio_data += noise
 
-        print(
-            f"🎵 Generated {duration}s synthetic audio with {len(audio_data)} samples"
-        )
+        print(f"🎵 Generated {duration}s synthetic audio with {len(audio_data)} samples")
 
         # Create audio chunk
         chunk = AudioChunk(
@@ -74,9 +76,7 @@ async def test_stt_service():
             chunk_data = audio_data[i : i + chunk_size]
 
             # Add to buffer
-            audio_chunk = stt_service.add_audio_to_buffer(
-                chunk_data.tolist(), sample_rate
-            )
+            audio_chunk = stt_service.add_audio_to_buffer(chunk_data.tolist(), sample_rate)
 
             if audio_chunk:
                 print(f"📦 Buffer returned chunk after {i/sample_rate:.1f}s")

@@ -72,9 +72,7 @@ app.add_middleware(
 )
 
 # Log CORS configuration
-logger.info(
-    "CORS middleware configured with allow_origins=['http://localhost:3000', 'http://127.0.0.1:3000']"
-)
+logger.info("CORS middleware configured with allow_origins=['http://localhost:3000', 'http://127.0.0.1:3000']")
 
 
 # Store active WebSocket connections
@@ -114,9 +112,7 @@ class ConnectionManager:
                 del self.connection_attempts[websocket]
             if websocket in self.session_states:
                 del self.session_states[websocket]
-            logger.info(
-                f"Client disconnected. Total connections: {len(self.active_connections)}"
-            )
+            logger.info(f"Client disconnected. Total connections: {len(self.active_connections)}")
         except Exception as e:
             logger.error(f"Error disconnecting WebSocket: {e}")
 
@@ -147,16 +143,12 @@ class ConnectionManager:
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_text(message)
                 else:
-                    logger.warning(
-                        "Attempted to send message to disconnected websocket"
-                    )
+                    logger.warning("Attempted to send message to disconnected websocket")
                     self.disconnect(websocket)
         except Exception as e:
             logger.error(f"Error sending message: {e}")
             # Only disconnect if we've had multiple failures
-            self.connection_attempts[websocket] = (
-                self.connection_attempts.get(websocket, 0) + 1
-            )
+            self.connection_attempts[websocket] = self.connection_attempts.get(websocket, 0) + 1
             if self.connection_attempts[websocket] >= 3:
                 logger.warning("Too many send failures, disconnecting client")
                 self.disconnect(websocket)
@@ -168,9 +160,7 @@ class ConnectionManager:
             except Exception as e:
                 logger.error(f"Error broadcasting message: {e}")
                 # Only disconnect if we've had multiple failures
-                self.connection_attempts[connection] = (
-                    self.connection_attempts.get(connection, 0) + 1
-                )
+                self.connection_attempts[connection] = self.connection_attempts.get(connection, 0) + 1
                 if self.connection_attempts[connection] >= 3:
                     logger.warning("Too many broadcast failures, disconnecting client")
                     self.disconnect(connection)
@@ -198,8 +188,7 @@ async def health():
         "timestamp": datetime.now().isoformat(),
         "services": {
             "stt": service_manager.get_stt_service() is not None,
-            "multimodal_with_screen_context": service_manager.get_multimodal_service()
-            is not None,
+            "multimodal_with_screen_context": service_manager.get_multimodal_service() is not None,
             "tts": service_manager.get_tts_service() is not None,
             "ready": service_manager.is_ready(),
             "fully_ready": service_manager.is_fully_ready(),
@@ -248,9 +237,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 message_type = message.get("type")
                 timestamp = message.get("timestamp", datetime.now().timestamp())
 
-                logger.info(
-                    f"Processing WebSocket message - Type: {message_type}, Timestamp: {timestamp}"
-                )
+                logger.info(f"Processing WebSocket message - Type: {message_type}, Timestamp: {timestamp}")
 
                 # Handle different message types
                 if message_type == "screen_share_start":
@@ -410,10 +397,7 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
     vad_info = message.get("vad", {})  # VAD information from frontend
     screen_image = message.get("screen_image")  # Optional screen capture
 
-    logger.debug(
-        f"Received audio data: {len(audio_data)} samples at {timestamp}, "
-        f"VAD: {vad_info}"
-    )
+    logger.debug(f"Received audio data: {len(audio_data)} samples at {timestamp}, " f"VAD: {vad_info}")
     if screen_image:
         logger.debug("Screen image included with audio data")
 
@@ -425,9 +409,7 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
 
     try:
         # Process audio with VAD information to manage speech sessions
-        audio_chunk = stt_service.process_audio_with_vad(
-            audio_data, sample_rate, vad_info, timestamp
-        )
+        audio_chunk = stt_service.process_audio_with_vad(audio_data, sample_rate, vad_info, timestamp)
 
         if audio_chunk:
             # We have a complete speech session ready for transcription
@@ -521,9 +503,7 @@ async def handle_vad_state(websocket: WebSocket, message: Dict[str, Any]):
                 await manager.send_personal_message(json.dumps(response), websocket)
 
                 # Use new flow that checks for screen triggers first
-                await handle_transcription_with_screen_check(
-                    websocket, transcription.text, transcription.timestamp
-                )
+                await handle_transcription_with_screen_check(websocket, transcription.text, transcription.timestamp)
 
             else:
                 logger.debug("Empty transcription result from silence-ended session")
@@ -604,15 +584,9 @@ def check_text_for_screen_triggers(text: str) -> Dict[str, Any]:
     ]
 
     # Find matches
-    trigger_matches = [
-        trigger for trigger in explicit_triggers if trigger in text_lower
-    ]
+    trigger_matches = [trigger for trigger in explicit_triggers if trigger in text_lower]
     context_matches = [word for word in context_words if word in text_lower]
-    question_matches = [
-        q
-        for q in question_indicators
-        if text_lower.startswith(q) or f" {q}" in text_lower
-    ]
+    question_matches = [q for q in question_indicators if text_lower.startswith(q) or f" {q}" in text_lower]
 
     # Calculate confidence based on matches
     confidence = 0.0
@@ -654,9 +628,7 @@ async def handle_transcription_with_screen_check(
 
     # First check if we already have a screen image
     if screen_image:
-        logger.info(
-            "Screen image already provided, proceeding to multimodal processing"
-        )
+        logger.info("Screen image already provided, proceeding to multimodal processing")
         await process_with_multimodal_llm(websocket, text, timestamp, screen_image)
         return
 
@@ -676,10 +648,7 @@ async def handle_transcription_with_screen_check(
     logger.info(f"Screen share on: {screen_share_on}")
     logger.info(f"Needs screen capture: {needs_screen_capture}")
 
-    if (
-        needs_screen_capture["should_capture"]
-        and needs_screen_capture["confidence"] >= 0.6
-    ):
+    if needs_screen_capture["should_capture"] and needs_screen_capture["confidence"] >= 0.6:
         logger.info(
             f"Screen capture recommended for text: '{text}' (confidence: {needs_screen_capture['confidence']:.2f})"
         )
@@ -727,9 +696,7 @@ async def handle_screen_capture_response(websocket: WebSocket, message: Dict[str
         logger.info("Received screen capture, processing with visual context")
 
         # Process with the original transcription timestamp for proper session continuity
-        await process_with_multimodal_llm(
-            websocket, original_text, original_timestamp, screen_image
-        )
+        await process_with_multimodal_llm(websocket, original_text, original_timestamp, screen_image)
     else:
         logger.warning(
             f"Invalid screen capture response - screen_image present: "
@@ -771,12 +738,8 @@ async def process_with_multimodal_llm(
             logger.info("Including screen context in conversation processing")
 
         # Generate AI response with performance monitoring (includes screen analysis if image provided)
-        async with PerformanceTimer(
-            performance_monitor, "multimodal", "process_conversation"
-        ):
-            ai_response = await multimodal_service.process_conversation(
-                conversation_input
-            )
+        async with PerformanceTimer(performance_monitor, "multimodal", "process_conversation"):
+            ai_response = await multimodal_service.process_conversation(conversation_input)
 
         logger.info(f"AI Response: {ai_response.text}")
 
@@ -826,17 +789,13 @@ async def process_with_tts(websocket: WebSocket, text: str, session_id: str):
         logger.info(f"Converting to speech: {text[:100]}...")
 
         # Create TTS request
-        tts_request = TTSRequest(
-            text=text, voice_preset="default", session_id=session_id
-        )
+        tts_request = TTSRequest(text=text, voice_preset="default", session_id=session_id)
 
         # Generate speech with performance monitoring
         async with PerformanceTimer(performance_monitor, "tts", "synthesize_speech"):
             tts_response = await tts_service.synthesize_speech(tts_request)
 
-        logger.info(
-            f"Generated {tts_response.duration:.2f}s of speech in {tts_response.processing_time:.2f}s"
-        )
+        logger.info(f"Generated {tts_response.duration:.2f}s of speech in {tts_response.processing_time:.2f}s")
 
         # Send audio response back to client
         audio_response = {
@@ -854,9 +813,7 @@ async def process_with_tts(websocket: WebSocket, text: str, session_id: str):
         try:
             await manager.send_personal_message(json.dumps(audio_response), websocket)
         except Exception as send_error:
-            logger.error(
-                f"Failed to send TTS audio response (connection likely closed): {send_error}"
-            )
+            logger.error(f"Failed to send TTS audio response (connection likely closed): {send_error}")
 
     except Exception as e:
         logger.error(f"Error processing with TTS: {e}")
@@ -870,9 +827,7 @@ async def process_with_tts(websocket: WebSocket, text: str, session_id: str):
             }
             await manager.send_personal_message(json.dumps(error_response), websocket)
         except Exception as send_error:
-            logger.error(
-                f"Failed to send TTS error response (connection likely closed): {send_error}"
-            )
+            logger.error(f"Failed to send TTS error response (connection likely closed): {send_error}")
 
 
 if __name__ == "__main__":

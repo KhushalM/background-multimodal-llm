@@ -4,9 +4,13 @@ Test script for TTS service
 """
 import asyncio
 import os
+import sys
 import time
 import numpy as np
 from dotenv import load_dotenv
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from models.TTS import create_tts_service, TTSRequest
 
@@ -23,7 +27,7 @@ async def test_tts_service():
         # Create TTS service (no token needed for local pipeline)
         print("📡 Loading local TTS pipeline...")
         async with await create_tts_service() as tts_service:
-        print("✅ TTS Service created successfully")
+            print("✅ TTS Service created successfully")
 
         # Test different types of text
         test_texts = [
@@ -89,9 +93,9 @@ async def test_tts_service():
 
             # Basic quality checks
             if response.audio_format == "silence":
-                    print("   ⚠️  Warning: Generated silence (model may be having issues)")
+                print("⚠️  Warning: Generated silence (model may be having issues)")
             elif len(response.audio_data) == 0:
-                print("   ❌ Error: No audio data generated")
+                print("❌ Error: No audio data generated")
             else:
                 # Check audio properties
                 audio_array = np.array(response.audio_data)
@@ -155,7 +159,7 @@ async def test_tts_service():
 
         print("\n✅ TTS service test completed successfully!")
         print("\n🎯 Key Features Verified:")
-            print("  ✅ Local Transformers pipeline integration")
+        print("  ✅ Local Transformers pipeline integration")
         print("  ✅ Text preprocessing and cleaning")
         print("  ✅ Audio generation and post-processing")
         print("  ✅ Multiple voice presets")
@@ -177,38 +181,38 @@ async def test_conversation_tts():
 
     try:
         async with await create_tts_service() as service:
-        # Simulate AI assistant responses
-        ai_responses = [
-            "Hello! I'm your AI assistant. How can I help you today?",
-            "I understand you're working on a Python project. That's great! What specific area do you need help with?",
-            "For web development with Python, I'd recommend starting with Flask or Django. Flask is simpler for beginners.",
-            "Absolutely! Here's a simple example of a Flask web application that you can start with.",
-            "You're welcome! Feel free to ask if you need help with anything else. I'm here to assist you.",
-        ]
+            # Simulate AI assistant responses
+            ai_responses = [
+                "Hello! I'm your AI assistant. How can I help you today?",
+                "I understand you're working on a Python project. That's great! What specific area do you need help with?",
+                "For web development with Python, I'd recommend starting with Flask or Django. Flask is simpler for beginners.",
+                "Absolutely! Here's a simple example of a Flask web application that you can start with.",
+                "You're welcome! Feel free to ask if you need help with anything else. I'm here to assist you.",
+            ]
 
-        print(f"🤖 Converting {len(ai_responses)} AI responses to speech...")
+            print(f"🤖 Converting {len(ai_responses)} AI responses to speech...")
 
-        total_time = 0
-        for i, response_text in enumerate(ai_responses):
-            print(f'\n💬 AI Response {i+1}: "{response_text[:50]}..."')
+            total_time = 0
+            for i, response_text in enumerate(ai_responses):
+                print(f'\n💬 AI Response {i+1}: "{response_text[:50]}..."')
 
-            request = TTSRequest(
-                text=response_text,
-                voice_preset="default",
-                session_id="conversation_test",
-            )
+                request = TTSRequest(
+                    text=response_text,
+                    voice_preset="default",
+                    session_id="conversation_test",
+                )
 
-            tts_response = await service.synthesize_speech(request)
-            total_time += tts_response.processing_time
+                tts_response = await service.synthesize_speech(request)
+                total_time += tts_response.processing_time
 
-            print(
-                f"🔊 Generated {tts_response.duration:.1f}s audio in {tts_response.processing_time:.1f}s"
-            )
+                print(
+                    f"🔊 Generated {tts_response.duration:.1f}s audio in {tts_response.processing_time:.1f}s"
+                )
 
-        print(f"\n📈 Conversation TTS Summary:")
-        print(f"   Responses processed: {len(ai_responses)}")
-        print(f"   Total processing time: {total_time:.1f}s")
-        print(f"   Average per response: {total_time/len(ai_responses):.1f}s")
+            print(f"\n📈 Conversation TTS Summary:")
+            print(f"   Responses processed: {len(ai_responses)}")
+            print(f"   Total processing time: {total_time:.1f}s")
+            print(f"   Average per response: {total_time/len(ai_responses):.1f}s")
 
     except Exception as e:
         print(f"❌ Error in conversation TTS test: {e}")

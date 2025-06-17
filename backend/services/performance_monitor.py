@@ -125,14 +125,10 @@ class PerformanceMonitor:
         if service == "stt" and metric.duration > self.thresholds["stt"]:
             logger.info("STT optimization suggestions:")
             logger.info("- Use smaller audio chunks")
-            logger.info(
-                "- Current model: distil-whisper/distil-large-v3.5 (already optimized)"
-            )
+            logger.info("- Current model: distil-whisper/distil-large-v3.5 (already optimized)")
             logger.info("- Implement audio preprocessing")
 
-        elif (
-            service == "multimodal" and metric.duration > self.thresholds["multimodal"]
-        ):
+        elif service == "multimodal" and metric.duration > self.thresholds["multimodal"]:
             logger.info("Multimodal optimization suggestions:")
             logger.info("- Reduce max_tokens in config")
             logger.info("- Current model: gemini-2.0-flash-exp (already fast)")
@@ -143,9 +139,7 @@ class PerformanceMonitor:
         elif service == "tts" and metric.duration > self.thresholds["tts"]:
             logger.info("TTS optimization suggestions:")
             logger.info("- Use shorter text inputs")
-            logger.info(
-                "- Current model: microsoft/speecht5_tts (balanced performance)"
-            )
+            logger.info("- Current model: microsoft/speecht5_tts (balanced performance)")
             logger.info("- Enable batch processing")
 
     def get_performance_summary(self) -> Dict[str, Any]:
@@ -157,11 +151,7 @@ class PerformanceMonitor:
         }
 
         for service_name, stats in self.service_stats.items():
-            success_rate = (
-                (stats.successful_requests / stats.total_requests * 100)
-                if stats.total_requests > 0
-                else 0
-            )
+            success_rate = (stats.successful_requests / stats.total_requests * 100) if stats.total_requests > 0 else 0
 
             service_summary = {
                 "total_requests": stats.total_requests,
@@ -175,9 +165,7 @@ class PerformanceMonitor:
             summary["services"][service_name] = service_summary
 
         # Determine overall health
-        health_scores = [
-            s.get("health_status", "good") for s in summary["services"].values()
-        ]
+        health_scores = [s.get("health_status", "good") for s in summary["services"].values()]
         if "poor" in health_scores:
             summary["overall_health"] = "poor"
         elif "fair" in health_scores:
@@ -213,21 +201,15 @@ class PerformanceMonitor:
             threshold = self.thresholds.get(service_name, 5.0)
 
             if success_rate < 0.9:
-                recommendations.append(
-                    f"Improve {service_name} reliability (success rate: {success_rate:.1%})"
-                )
+                recommendations.append(f"Improve {service_name} reliability (success rate: {success_rate:.1%})")
 
             if stats.avg_duration > threshold:
-                recommendations.append(
-                    f"Optimize {service_name} performance (avg: {stats.avg_duration:.1f}s)"
-                )
+                recommendations.append(f"Optimize {service_name} performance (avg: {stats.avg_duration:.1f}s)")
 
         # Pipeline-level recommendations
         total_avg = sum(stats.avg_duration for stats in self.service_stats.values())
         if total_avg > self.thresholds["total_pipeline"]:
-            recommendations.append(
-                "Consider parallel processing to reduce total pipeline time"
-            )
+            recommendations.append("Consider parallel processing to reduce total pipeline time")
 
         if not recommendations:
             recommendations.append("Performance is within acceptable limits")
@@ -242,12 +224,7 @@ class PerformanceMonitor:
         stt_stats = self.service_stats.get("stt")
         tts_stats = self.service_stats.get("tts")
 
-        if (
-            stt_stats
-            and tts_stats
-            and stt_stats.avg_duration > 2.0
-            and tts_stats.avg_duration > 2.0
-        ):
+        if stt_stats and tts_stats and stt_stats.avg_duration > 2.0 and tts_stats.avg_duration > 2.0:
             if not self.optimizations["parallel_processing"]:
                 self.optimizations["parallel_processing"] = True
                 optimizations_applied.append("Enabled parallel STT/TTS processing")

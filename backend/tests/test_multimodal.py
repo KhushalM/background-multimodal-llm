@@ -4,9 +4,13 @@ Test script for Multimodal service with integrated screen context
 """
 import asyncio
 import os
+import sys
 import time
 import base64
 from dotenv import load_dotenv
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from models.multimodal import create_multimodal_service, ConversationInput
 

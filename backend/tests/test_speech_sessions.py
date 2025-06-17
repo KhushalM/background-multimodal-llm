@@ -4,8 +4,13 @@ Test script for speech session-based STT processing
 """
 import asyncio
 import numpy as np
+import os
+import sys
 import time
 from dotenv import load_dotenv
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from models.STT import create_stt_service
 

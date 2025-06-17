@@ -21,9 +21,7 @@ class STTConfig:
     torch_dtype: str = "auto"  # "auto", "float16", "float32"
     sample_rate: int = 16000
     min_speech_duration: float = 0.5  # Minimum speech duration to process (seconds)
-    max_speech_duration: float = (
-        30.0  # Maximum speech duration to prevent memory issues
-    )
+    max_speech_duration: float = 30.0  # Maximum speech duration to prevent memory issues
     max_retries: int = 3
     use_flash_attention_2: bool = False  # Set to True if supported
 
@@ -88,17 +86,13 @@ class STTService:
 
         # Create dedicated ThreadPoolExecutor to avoid semaphore leaks
         # Use thread_name_prefix and ensure proper cleanup
-        self.executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="stt", initializer=None, initargs=()
-        )
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="stt", initializer=None, initargs=())
 
         # Speech session management
         self.current_session: Optional[SpeechSession] = None
         self.session_counter = 0
 
-        logger.info(
-            f"STT service initialized with device: {self.device}, dtype: {self.torch_dtype}"
-        )
+        logger.info(f"STT service initialized with device: {self.device}, dtype: {self.torch_dtype}")
 
     def _get_device(self) -> str:
         """Determine the best device to use"""
@@ -134,9 +128,7 @@ class STTService:
                 torch_dtype=self.torch_dtype,
                 low_cpu_mem_usage=True,
                 use_safetensors=True,
-                attn_implementation=(
-                    "flash_attention_2" if self.config.use_flash_attention_2 else None
-                ),
+                attn_implementation=("flash_attention_2" if self.config.use_flash_attention_2 else None),
             )
             model.to(self.device)
 
@@ -183,9 +175,7 @@ class STTService:
             finally:
                 self.executor = None
 
-    def _preprocess_audio(
-        self, audio_data: List[float], sample_rate: int
-    ) -> np.ndarray:
+    def _preprocess_audio(self, audio_data: List[float], sample_rate: int) -> np.ndarray:
         """Convert audio data to the format expected by Whisper"""
         try:
             # Convert to numpy array
@@ -218,14 +208,10 @@ class STTService:
 
         try:
             if self.pipeline is None:
-                raise RuntimeError(
-                    "STT pipeline not initialized. Use 'async with' context manager."
-                )
+                raise RuntimeError("STT pipeline not initialized. Use 'async with' context manager.")
 
             # Preprocess audio
-            audio_array = self._preprocess_audio(
-                audio_chunk.data, audio_chunk.sample_rate
-            )
+            audio_array = self._preprocess_audio(audio_chunk.data, audio_chunk.sample_rate)
 
             # Run inference with pipeline
             # Run in dedicated executor to avoid blocking the event loop
@@ -248,9 +234,7 @@ class STTService:
 
             processing_time = time.time() - start_time
 
-            logger.info(
-                f"Transcribed speech session: '{text}' in {processing_time:.2f}s"
-            )
+            logger.info(f"Transcribed speech session: '{text}' in {processing_time:.2f}s")
 
             return TranscriptionResult(
                 text=text,
@@ -297,9 +281,7 @@ class STTService:
 
             # Check if this is a complete speech session (has sufficient duration)
             if session_duration >= self.config.min_speech_duration:
-                logger.info(
-                    f"Processing complete speech session: {session_duration:.2f}s of audio"
-                )
+                logger.info(f"Processing complete speech session: {session_duration:.2f}s of audio")
 
                 # Create audio chunk directly from the complete session
                 session_id = f"batch_session_{int(timestamp)}"
@@ -317,9 +299,7 @@ class STTService:
 
                 return audio_chunk
             else:
-                logger.debug(
-                    f"Batch audio too short ({session_duration:.2f}s), discarding"
-                )
+                logger.debug(f"Batch audio too short ({session_duration:.2f}s), discarding")
                 # Clear any existing session
                 if self.current_session is not None:
                     self.current_session = None
@@ -369,40 +349,28 @@ class STTService:
             self.current_session = None
             return audio_chunk
         else:
-            logger.debug(
-                f"Speech session too short ({session_duration:.2f}s), discarding"
-            )
+            logger.debug(f"Speech session too short ({session_duration:.2f}s), discarding")
             self.current_session = None
             return None
 
     # Legacy methods for backward compatibility
-    def add_audio_to_buffer(
-        self, audio_data: List[float], sample_rate: int
-    ) -> Optional[AudioChunk]:
+    def add_audio_to_buffer(self, audio_data: List[float], sample_rate: int) -> Optional[AudioChunk]:
         """
         Legacy method for backward compatibility
         This method is deprecated - use process_audio_with_vad instead
         """
-        logger.warning(
-            "add_audio_to_buffer is deprecated, use process_audio_with_vad instead"
-        )
+        logger.warning("add_audio_to_buffer is deprecated, use process_audio_with_vad instead")
 
         # For backward compatibility, assume speech is always active
         vad_info = {"isSpeaking": True}
-        return self.process_audio_with_vad(
-            audio_data, sample_rate, vad_info, time.time()
-        )
+        return self.process_audio_with_vad(audio_data, sample_rate, vad_info, time.time())
 
-    async def transcribe_streaming(
-        self, audio_stream
-    ) -> AsyncGenerator[TranscriptionResult, None]:
+    async def transcribe_streaming(self, audio_stream) -> AsyncGenerator[TranscriptionResult, None]:
         """Transcribe streaming audio data"""
         async for audio_data, sample_rate in audio_stream:
             # For streaming, assume speech is always active
             vad_info = {"isSpeaking": True}
-            chunk = self.process_audio_with_vad(
-                audio_data, sample_rate, vad_info, time.time()
-            )
+            chunk = self.process_audio_with_vad(audio_data, sample_rate, vad_info, time.time())
             if chunk:
                 result = await self.transcribe_chunk(chunk)
                 if result.text:  # Only yield non-empty results
@@ -414,9 +382,7 @@ class STTService:
 
 
 # Factory function for easy instantiation
-async def create_stt_service(
-    model_name: str = "distil-whisper/distil-large-v3.5", **config_kwargs
-) -> STTService:
+async def create_stt_service(model_name: str = "distil-whisper/distil-large-v3.5", **config_kwargs) -> STTService:
     """Create and initialize STT service"""
     config = STTConfig(model_name=model_name, **config_kwargs)
     return STTService(config)

@@ -95,10 +95,19 @@ Repository = "https://github.com/khushal/background-multimodal-llm"
 
 [tool.black]
 target-version = ['py311']
+line-length = 200
 
 [tool.isort]
 multi_line_output = 3
 known_first_party = ["multimodal_ai_backend"]
+line_length = 200
+
+[tool.flake8]
+max-line-length = 200
+extend-ignore = ["E203", "W503"]
+
+[tool.pylint]
+max-line-length = 200
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

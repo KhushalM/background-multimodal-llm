@@ -133,9 +133,7 @@ class MultimodalService:
 
         return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
-    def _build_conversation_context(
-        self, session_id: str, current_text: str
-    ) -> List[str]:
+    def _build_conversation_context(self, session_id: str, current_text: str) -> List[str]:
         """Build conversation context from memory"""
         memory = self._get_or_create_memory(session_id)
         context_parts = [self.config.system_prompt]
@@ -153,26 +151,21 @@ class MultimodalService:
 
         return context_parts
 
-    async def process_conversation(
-        self, input_data: ConversationInput
-    ) -> ConversationResponse:
+    async def process_conversation(self, input_data: ConversationInput) -> ConversationResponse:
         """Process a conversation turn with optional screen context"""
         start_time = time.time()
 
         try:
             if not self.model:
                 return ConversationResponse(
-                    text="Sorry, the AI service is not available. "
-                    "Please check the API configuration.",
+                    text="Sorry, the AI service is not available. " "Please check the API configuration.",
                     timestamp=input_data.timestamp,
                     processing_time=time.time() - start_time,
                     session_id=input_data.session_id,
                 )
 
             # Build conversation context
-            context_parts = self._build_conversation_context(
-                input_data.session_id, input_data.text
-            )
+            context_parts = self._build_conversation_context(input_data.session_id, input_data.text)
 
             # Prepare content for Gemini (text + optional image)
             content = ["\n".join(context_parts)]
@@ -220,11 +213,7 @@ class MultimodalService:
                 None, lambda: self.model.generate_content(content)
             )
 
-            response_text = (
-                response.text
-                if response.text
-                else "I apologize, but I couldn't generate a response."
-            )
+            response_text = response.text if response.text else "I apologize, but I couldn't generate a response."
 
             # Save to memory
             memory = self._get_or_create_memory(input_data.session_id)
@@ -266,10 +255,7 @@ class MultimodalService:
             logger.error(f"Error processing conversation: {e}")
 
             return ConversationResponse(
-                text=(
-                    "I apologize, but I encountered an error processing "
-                    "your request. Please try again."
-                ),
+                text=("I apologize, but I encountered an error processing " "your request. Please try again."),
                 timestamp=input_data.timestamp,
                 processing_time=time.time() - start_time,
                 session_id=input_data.session_id,
@@ -308,9 +294,7 @@ class MultimodalService:
 
 
 # Factory function
-async def create_multimodal_service(
-    api_key: str, model_name: str = "gemini-2.0-flash-exp"
-) -> MultimodalService:
+async def create_multimodal_service(api_key: str, model_name: str = "gemini-2.0-flash-exp") -> MultimodalService:
     """Create and initialize multimodal service with screen context capabilities"""
     config = MultimodalConfig(
         model_name=model_name,
@@ -329,9 +313,7 @@ async def create_multimodal_service(
 
         response = await service.process_conversation(test_input)
         if response.text and "error" not in response.text.lower():
-            logger.info(
-                "Multimodal service with screen context initialized successfully"
-            )
+            logger.info("Multimodal service with screen context initialized successfully")
             # Clean up test session
             service.clear_session_memory("test_session")
         else:

@@ -70,9 +70,7 @@ class TTSService:
 
         # Create dedicated ThreadPoolExecutor to avoid semaphore leaks
         # Use thread_name_prefix and ensure proper cleanup
-        self.executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="tts", initializer=None, initargs=()
-        )
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tts", initializer=None, initargs=())
 
         # Pipeline components
         self.model = None
@@ -80,9 +78,7 @@ class TTSService:
         self.vocoder = None
         self.speaker_embeddings = None
 
-        logger.info(
-            f"TTS service initialized with device: {self.device}, dtype: {self.torch_dtype}"
-        )
+        logger.info(f"TTS service initialized with device: {self.device}, dtype: {self.torch_dtype}")
 
     def _get_device(self) -> str:
         """Determine the best device to use"""
@@ -116,24 +112,16 @@ class TTSService:
             self.processor = SpeechT5Processor.from_pretrained(self.config.model_name)
 
             # Load model
-            self.model = SpeechT5ForTextToSpeech.from_pretrained(
-                self.config.model_name, torch_dtype=self.torch_dtype
-            )
+            self.model = SpeechT5ForTextToSpeech.from_pretrained(self.config.model_name, torch_dtype=self.torch_dtype)
             self.model.to(self.device)
 
             # Load vocoder
-            self.vocoder = SpeechT5HifiGan.from_pretrained(
-                self.config.vocoder_name, torch_dtype=self.torch_dtype
-            )
+            self.vocoder = SpeechT5HifiGan.from_pretrained(self.config.vocoder_name, torch_dtype=self.torch_dtype)
             self.vocoder.to(self.device)
 
             # Load speaker embeddings dataset
-            embeddings_dataset = load_dataset(
-                "Matthijs/cmu-arctic-xvectors", split="validation"
-            )
-            speaker_embeddings = torch.tensor(
-                embeddings_dataset[7306]["xvector"]
-            ).unsqueeze(0)
+            embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
+            speaker_embeddings = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
             self.speaker_embeddings = speaker_embeddings.to(self.device)
 
             logger.info("TTS pipeline loaded successfully")
@@ -226,9 +214,7 @@ class TTSService:
 
         return text
 
-    def _postprocess_audio(
-        self, audio_data: np.ndarray, target_sample_rate: int = None
-    ) -> np.ndarray:
+    def _postprocess_audio(self, audio_data: np.ndarray, target_sample_rate: int = None) -> np.ndarray:
         """Post-process audio data"""
         if target_sample_rate and target_sample_rate != self.config.sample_rate:
             # Simple resampling
@@ -252,9 +238,7 @@ class TTSService:
 
         try:
             if self.model is None or self.processor is None:
-                raise RuntimeError(
-                    "TTS pipeline not initialized. Use 'async with' context manager."
-                )
+                raise RuntimeError("TTS pipeline not initialized. Use 'async with' context manager.")
 
             # Preprocess text
             processed_text = self._preprocess_text(request.text)
@@ -262,9 +246,7 @@ class TTSService:
 
             # Run in dedicated executor to avoid blocking the event loop
             loop = asyncio.get_event_loop()
-            audio_data = await loop.run_in_executor(
-                self.executor, self._generate_speech, processed_text
-            )
+            audio_data = await loop.run_in_executor(self.executor, self._generate_speech, processed_text)
 
             # Post-process audio
             audio_data = self._postprocess_audio(audio_data)
@@ -305,18 +287,14 @@ class TTSService:
 
         # Generate speech with the model
         with torch.no_grad():
-            speech = self.model.generate_speech(
-                input_ids, self.speaker_embeddings, vocoder=self.vocoder
-            )
+            speech = self.model.generate_speech(input_ids, self.speaker_embeddings, vocoder=self.vocoder)
 
         # Convert to numpy and ensure it's on CPU
         speech_np = speech.cpu().numpy()
 
         return speech_np
 
-    async def synthesize_batch(
-        self, texts: List[str], session_id: Optional[str] = None
-    ) -> List[TTSResponse]:
+    async def synthesize_batch(self, texts: List[str], session_id: Optional[str] = None) -> List[TTSResponse]:
         """Synthesize multiple texts in batch"""
         responses = []
 
@@ -339,9 +317,7 @@ class TTSService:
     async def test_synthesis(self) -> bool:
         """Test if the TTS service is working"""
         try:
-            test_request = TTSRequest(
-                text="Hello, this is a test.", voice_preset="default"
-            )
+            test_request = TTSRequest(text="Hello, this is a test.", voice_preset="default")
 
             response = await self.synthesize_speech(test_request)
             return len(response.audio_data) > 0 and response.audio_format != "silence"
@@ -352,9 +328,7 @@ class TTSService:
 
 
 # Factory function for easy instantiation
-async def create_tts_service(
-    model_name: str = "microsoft/speecht5_tts", **config_kwargs
-) -> TTSService:
+async def create_tts_service(model_name: str = "microsoft/speecht5_tts", **config_kwargs) -> TTSService:
     """Create and initialize TTS service"""
     config = TTSConfig(model_name=model_name, **config_kwargs)
 

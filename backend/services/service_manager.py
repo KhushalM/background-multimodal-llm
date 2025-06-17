@@ -29,9 +29,7 @@ class ServiceManager:
         try:
             # Initialize STT service (now uses local pipeline, no token needed)
             logger.info("Initializing STT service with local pipeline...")
-            self.stt_service = await create_stt_service(
-                model_name="distil-whisper/distil-large-v3.5"
-            )
+            self.stt_service = await create_stt_service(model_name="distil-whisper/distil-large-v3.5")
             await self.stt_service.__aenter__()  # Initialize the pipeline
             logger.info("STT service initialized successfully")
 
@@ -41,19 +39,13 @@ class ServiceManager:
                 self.multimodal_service = await create_multimodal_service(
                     api_key=self.gemini_token, model_name="gemini-2.0-flash-exp"
                 )
-                logger.info(
-                    "Multimodal service with screen context initialized successfully"
-                )
+                logger.info("Multimodal service with screen context initialized successfully")
             else:
-                logger.warning(
-                    "No Gemini API key found, Multimodal service not available"
-                )
+                logger.warning("No Gemini API key found, Multimodal service not available")
 
             # Initialize TTS service (now uses local pipeline, no token needed)
             logger.info("Initializing TTS service with local pipeline...")
-            self.tts_service = await create_tts_service(
-                model_name="microsoft/speecht5_tts"
-            )
+            self.tts_service = await create_tts_service(model_name="microsoft/speecht5_tts")
             await self.tts_service.__aenter__()  # Initialize the pipeline
             logger.info("TTS service initialized successfully")
 
@@ -102,11 +94,7 @@ class ServiceManager:
 
     def is_ready(self) -> bool:
         """Check if essential services are ready"""
-        return (
-            self.stt_service is not None
-            and self.multimodal_service is not None
-            and self.tts_service is not None
-        )
+        return self.stt_service is not None and self.multimodal_service is not None and self.tts_service is not None
 
     def is_fully_ready(self) -> bool:
         """Check if all services are ready (same as is_ready since screen context is integrated)"""
