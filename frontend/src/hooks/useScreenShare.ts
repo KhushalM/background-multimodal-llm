@@ -5,17 +5,22 @@ interface UseScreenShareProps {
   sendMessage: (message: any) => void;
   isVoiceActive: boolean;
   onConnectionChange: (shouldKeep: boolean) => void;
+  setProtectedOperation?: (isProtected: boolean) => void;
 }
 
 export const useScreenShare = ({ 
   onStatusChange, 
   sendMessage, 
   isVoiceActive, 
-  onConnectionChange
+  onConnectionChange,
+  setProtectedOperation
 }: UseScreenShareProps) => {
   const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Add a flag to track when we're intentionally stopping
+  const isStoppingRef = useRef<boolean>(false);
 
   // Create a hidden canvas for screen capture
   const createCaptureCanvas = useCallback(() => {
@@ -106,9 +111,17 @@ export const useScreenShare = ({
   const toggleScreenShare = useCallback(async () => {
     try {
       if (!isScreenSharing) {
-        // Start screen sharing
+        // Start screen sharing - FIRST establish and protect WebSocket connection
+        onStatusChange("Connecting to server...");
         onConnectionChange(true);
 
+        // Protect the WebSocket during this critical operation
+        if (setProtectedOperation) {
+          console.log("🛡️ Protecting WebSocket during screen share start");
+          setProtectedOperation(true);
+        }
+
+        onStatusChange("Requesting screen sharing permission...");
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
           audio: true,
@@ -124,19 +137,54 @@ export const useScreenShare = ({
 
         // Handle stream end (when user stops sharing)
         stream.getVideoTracks()[0].addEventListener("ended", () => {
-          setIsScreenSharing(false);
-          onStatusChange("Screen sharing stopped");
-
-          // Close WebSocket if voice agent is also inactive
-          if (!isVoiceActive) {
-            onConnectionChange(false);
+          // Check if this is an intentional stop
+          if (isStoppingRef.current) {
+            console.log("✅ Stream ended: Intentional stop");
+            setIsScreenSharing(false);
+            onStatusChange("Screen sharing stopped");
+            
+            // Close WebSocket if voice agent is also inactive
+            if (!isVoiceActive) {
+              onConnectionChange(false);
+            }
+            return;
           }
+          
+          // For unexpected ended events, add verification delay
+          console.log("⚠️ Stream ended unexpectedly - verifying...");
+          setTimeout(() => {
+            // Check if stream is actually ended and we're not in a stopping state
+            if (mediaStreamRef.current && 
+                mediaStreamRef.current.getVideoTracks()[0]?.readyState === 'ended' && 
+                !isStoppingRef.current) {
+              console.log("✅ Confirmed: Stream actually ended");
+              setIsScreenSharing(false);
+              onStatusChange("Screen sharing stopped");
+              
+              // Close WebSocket if voice agent is also inactive
+              if (!isVoiceActive) {
+                onConnectionChange(false);
+              }
+            } else {
+              console.log("🛡️ False ended event ignored - stream still active");
+            }
+          }, 1000); // 1 second verification delay
         });
 
         setIsScreenSharing(true);
         onStatusChange("Screen sharing started");
+
+        // Remove protection after screen sharing is established
+        if (setProtectedOperation) {
+          setTimeout(() => {
+            console.log("🔓 Removing WebSocket protection after screen share stabilization");
+            setProtectedOperation(false);
+          }, 1000); // Wait 1 second for stabilization
+        }
+
       } else {
         // Stop screen sharing
+        isStoppingRef.current = true; // Mark that we're intentionally stopping
         if (mediaStreamRef.current) {
           mediaStreamRef.current.getTracks().forEach((track) => track.stop());
           mediaStreamRef.current = null;
@@ -158,21 +206,39 @@ export const useScreenShare = ({
     } catch (error) {
       console.error("Screen sharing error:", error);
       onStatusChange("Screen sharing failed - Unable to access screen sharing");
+      
+      // Remove protection on error
+      if (setProtectedOperation) {
+        setProtectedOperation(false);
+      }
     }
-  }, [isScreenSharing, onStatusChange, sendMessage, isVoiceActive, onConnectionChange]);
+  }, [isScreenSharing, onStatusChange, sendMessage, isVoiceActive, onConnectionChange, setProtectedOperation]);
 
   const cleanup = useCallback(() => {
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-    }
-    
     // Clean up canvas
     if (canvasRef.current) {
       canvasRef.current.remove();
       canvasRef.current = null;
     }
-  }, []);
+    
+    // CRITICAL: Only stop media stream if we're intentionally stopping
+    // Do NOT stop stream during React cleanup cycles when screen sharing is active
+    if (isStoppingRef.current && mediaStreamRef.current) {
+      console.log("🧹 Cleanup: Stopping media stream (intentional stop)");
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    } else if (mediaStreamRef.current) {
+      console.log("🛡️ Cleanup: Preserving media stream (active session)");
+      // Don't touch the media stream during active sessions
+    }
+    
+    // Reset stopping flag
+    if (isStoppingRef.current) {
+      setTimeout(() => {
+        isStoppingRef.current = false;
+      }, 100);
+    }
+  }, [isScreenSharing]); // Remove setProtectedOperation from dependencies to reduce cleanup triggers
 
   return {
     isScreenSharing,

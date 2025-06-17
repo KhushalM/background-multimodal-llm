@@ -164,6 +164,7 @@ const App: React.FC = () => {
     onStatusChange: setStatusMessage,
     sendMessage,
     isVoiceActive: isVoiceActive,
+    setProtectedOperation,
     onConnectionChange: (shouldConnect) => {
       // This will be called when screen sharing starts/stops
       const newScreenState = shouldConnect;

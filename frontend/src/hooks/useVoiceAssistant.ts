@@ -37,6 +37,9 @@ export const useVoiceAgent = ({
   const speechStartTimeRef = useRef<number>(0);
   const isAccumulatingRef = useRef<boolean>(false);
 
+  // Add a flag to track when we're intentionally stopping
+  const isStoppingRef = useRef<boolean>(false);
+
   // Dynamically import and initialize VAD only when needed
   const initializeVAD = useCallback(async () => {
     try {
@@ -128,22 +131,6 @@ export const useVoiceAgent = ({
               offset += chunk.length;
             }
             
-            // Capture screen if VAD-triggered capture is enabled
-            let screenImage = null;
-            if (enableVadScreenCapture && captureScreen && isScreenSharing) {
-              try {
-                console.log('📸 Capturing screen for VAD-triggered analysis...');
-                screenImage = await captureScreen();
-                if (screenImage) {
-                  console.log('✅ Screen captured for VAD analysis');
-                } else {
-                  console.warn('⚠️ Failed to capture screen for VAD analysis');
-                }
-              } catch (error) {
-                console.error('Error capturing screen for VAD:', error);
-              }
-            }
-
             // Send the complete accumulated audio with optional screen context
             try {
               sendMessage({
@@ -151,7 +138,7 @@ export const useVoiceAgent = ({
                 data: Array.from(combinedAudio),
                 sample_rate: 16000,
                 timestamp: currentTime,
-                screen_image: screenImage, // Include screen capture if available
+                screen_image: null, // Include screen capture if available
                 vad: {
                   isSpeaking: false,  // This tells backend to complete the session
                   energy: 0.1,
@@ -159,8 +146,7 @@ export const useVoiceAgent = ({
                 },
               });
               
-              const captureStatus = screenImage ? ' with screen context' : '';
-              console.log(`✅ Sent complete audio session: ${combinedAudio.length} samples${captureStatus}`);
+              console.log(`✅ Sent complete audio session: ${combinedAudio.length} samples`);
             } catch (error) {
               console.warn('Failed to send audio data:', error);
             }
@@ -322,13 +308,30 @@ export const useVoiceAgent = ({
 
       } else {
         // Stop voice agent
+        isStoppingRef.current = true; // Mark that we're intentionally stopping
         onStatusChange("Stopping voice agent...");
         
         if (vadInstanceRef.current) {
           try {
+            console.log("🎤 Stopping VAD and releasing microphone...");
+            // First pause to stop processing
             vadInstanceRef.current.pause();
+            // Then destroy to fully release microphone resources
+            if (typeof vadInstanceRef.current.destroy === 'function') {
+              await vadInstanceRef.current.destroy();
+              console.log("✅ VAD destroyed and microphone released");
+            } else if (typeof vadInstanceRef.current.stop === 'function') {
+              await vadInstanceRef.current.stop();
+              console.log("✅ VAD stopped and microphone released");
+            } else {
+              console.log("⚠️ VAD paused (limited cleanup available)");
+            }
+            // Clear the reference to force re-initialization next time
+            vadInstanceRef.current = null;
           } catch (error) {
             console.error("Error stopping VAD:", error);
+            // Force clear the reference even on error
+            vadInstanceRef.current = null;
           }
         }
 
@@ -389,9 +392,25 @@ export const useVoiceAgent = ({
       
       if (vadInstanceRef.current) {
         try {
+          console.log("🎤 Stopping VAD and releasing microphone...");
+          // First pause to stop processing
           vadInstanceRef.current.pause();
-        } catch (cleanupError) {
-          console.error("Error during cleanup:", cleanupError);
+          // Then destroy to fully release microphone resources
+          if (typeof vadInstanceRef.current.destroy === 'function') {
+            await vadInstanceRef.current.destroy();
+            console.log("✅ VAD destroyed and microphone released");
+          } else if (typeof vadInstanceRef.current.stop === 'function') {
+            await vadInstanceRef.current.stop();
+            console.log("✅ VAD stopped and microphone released");
+          } else {
+            console.log("⚠️ VAD paused (limited cleanup available)");
+          }
+          // Clear the reference to force re-initialization next time
+          vadInstanceRef.current = null;
+        } catch (error) {
+          console.error("Error stopping VAD:", error);
+          // Force clear the reference even on error
+          vadInstanceRef.current = null;
         }
       }
       
@@ -423,23 +442,47 @@ export const useVoiceAgent = ({
   }, [isVoiceActive, onConnectionChange, onStatusChange, sendMessage, isScreenSharing, initializeVAD, setProtectedOperation, isActuallyConnected, waitForConnection]);
 
   const cleanup = useCallback(async () => {
-    // Only cleanup VAD resources, do NOT affect connection state
-    if (vadInstanceRef.current && isVoiceActive) {
+    // Only cleanup VAD resources when intentionally stopping, do NOT affect connection state
+    // IMPORTANT: Only release microphone when intentionally stopping the voice agent
+    if (vadInstanceRef.current && isStoppingRef.current) {
       try {
-        console.log("🧹 Cleaning up VAD resources (preserving connection state)");
+        console.log("🧹 Cleaning up VAD resources during intentional stop");
+        console.log("🎤 Stopping VAD and releasing microphone...");
+        // First pause to stop processing
         vadInstanceRef.current.pause();
+        // Then destroy to fully release microphone resources
+        if (typeof vadInstanceRef.current.destroy === 'function') {
+          await vadInstanceRef.current.destroy();
+          console.log("✅ VAD destroyed and microphone released during cleanup");
+        } else if (typeof vadInstanceRef.current.stop === 'function') {
+          await vadInstanceRef.current.stop();
+          console.log("✅ VAD stopped and microphone released during cleanup");
+        } else {
+          console.log("⚠️ VAD paused during cleanup (limited cleanup available)");
+        }
+        // Clear the reference to force re-initialization next time
+        vadInstanceRef.current = null;
       } catch (error) {
         console.error("Error during VAD cleanup:", error);
+        // Force clear the reference even on error
+        vadInstanceRef.current = null;
       }
+    } else if (vadInstanceRef.current && !isStoppingRef.current) {
+      console.log("🛡️ Preserving VAD and microphone during non-intentional cleanup");
+      // During non-intentional cleanup (React re-renders), preserve the microphone
+      // Only clear accumulator but keep VAD running
     }
-    // Clear accumulator
+    
+    // Always clear accumulator regardless
     audioAccumulatorRef.current = [];
     isAccumulatingRef.current = false;
     
-    // ENHANCED PROTECTION: Always protect during cleanup when voice is active
-    // This handles React state synchronization issues where screen sharing state might be stale
-    if (isVoiceActive && setProtectedOperation) {
-      console.log("🛡️ Protecting WebSocket during voice cleanup (voice active - preventing disconnection)");
+    // ENHANCED PROTECTION: Only protect during cleanup when voice is active AND not intentionally stopping
+    // This handles React state synchronization issues while allowing proper disconnection during shutdown
+    const shouldProtect = isVoiceActive && !isStoppingRef.current && setProtectedOperation;
+    
+    if (shouldProtect) {
+      console.log("🛡️ Protecting WebSocket during voice cleanup (active session - preventing disconnection)");
       console.log("📊 Voice agent cleanup: Applying protection due to active voice session");
       setProtectedOperation(true);
       
@@ -450,9 +493,17 @@ export const useVoiceAgent = ({
           console.log("📊 Voice agent cleanup protection expired");
           setProtectedOperation(false);
         }
-      }, 3000); // Increased to 3 seconds for better stability
+      }, 2000); // Reduced to 2 seconds since this is more targeted
     } else {
-      console.log("📊 Voice agent cleanup: No protection needed (voice inactive)");
+      const reason = !isVoiceActive ? "voice inactive" : isStoppingRef.current ? "voice stopping" : "no protection function";
+      console.log(`📊 Voice agent cleanup: No protection needed (${reason})`);
+    }
+    
+    // Reset stopping flag after cleanup
+    if (isStoppingRef.current) {
+      setTimeout(() => {
+        isStoppingRef.current = false;
+      }, 100);
     }
     
     // IMPORTANT: Do not call onConnectionChange here to avoid affecting screen sharing
