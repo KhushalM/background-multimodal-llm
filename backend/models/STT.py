@@ -7,6 +7,7 @@ from typing import Optional, List, AsyncGenerator
 from dataclasses import dataclass
 import torch
 from transformers import pipeline, AutoProcessor, AutoModelForSpeechSeq2Seq
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,12 @@ class STTService:
         self.pipeline = None
         self.device = self._get_device()
         self.torch_dtype = self._get_torch_dtype()
+
+        # Create dedicated ThreadPoolExecutor to avoid semaphore leaks
+        # Use thread_name_prefix and ensure proper cleanup
+        self.executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="stt", initializer=None, initargs=()
+        )
 
         # Speech session management
         self.current_session: Optional[SpeechSession] = None
@@ -165,6 +172,17 @@ class STTService:
                 torch.cuda.empty_cache()
             self.pipeline = None
 
+        # Shutdown the executor to prevent semaphore leaks
+        if hasattr(self, "executor") and self.executor:
+            try:
+                # First try immediate shutdown, then wait
+                self.executor.shutdown(wait=False)
+                self.executor.shutdown(wait=True)
+            except Exception as e:
+                logger.warning(f"Error shutting down STT executor: {e}")
+            finally:
+                self.executor = None
+
     def _preprocess_audio(
         self, audio_data: List[float], sample_rate: int
     ) -> np.ndarray:
@@ -210,10 +228,10 @@ class STTService:
             )
 
             # Run inference with pipeline
-            # Run in executor to avoid blocking the event loop
+            # Run in dedicated executor to avoid blocking the event loop
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
+                self.executor,
                 lambda: self.pipeline(  # type: ignore
                     audio_array,
                     generate_kwargs={"language": "english"},

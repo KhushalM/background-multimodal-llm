@@ -6,6 +6,9 @@ Handles WebSocket connections for screen sharing and voice assistant functionali
 
 import json
 import logging
+import signal
+import sys
+import asyncio
 from typing import Dict, List, Any
 from datetime import datetime
 import time
@@ -48,6 +51,10 @@ async def shutdown_event():
     """Cleanup services on shutdown"""
     await service_manager.cleanup_services()
     logger.info("All services cleaned up")
+
+
+# Note: Removed custom signal handlers to let uvicorn handle shutdown naturally
+# This prevents interference with the cleanup process
 
 
 # Add CORS middleware

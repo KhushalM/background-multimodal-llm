@@ -63,10 +63,30 @@ class ServiceManager:
 
     async def cleanup_services(self):
         """Clean up all services"""
+        # Clean up STT service
         if self.stt_service:
-            await self.stt_service.__aexit__(None, None, None)
+            try:
+                await self.stt_service.__aexit__(None, None, None)
+                logger.info("STT service cleaned up successfully")
+            except Exception as e:
+                logger.error(f"Error cleaning up STT service: {e}")
+            finally:
+                self.stt_service = None
+
+        # Clean up TTS service
         if self.tts_service:
-            await self.tts_service.__aexit__(None, None, None)
+            try:
+                await self.tts_service.__aexit__(None, None, None)
+                logger.info("TTS service cleaned up successfully")
+            except Exception as e:
+                logger.error(f"Error cleaning up TTS service: {e}")
+            finally:
+                self.tts_service = None
+
+        # Clean up multimodal service (no special cleanup needed)
+        if self.multimodal_service:
+            self.multimodal_service = None
+            logger.info("Multimodal service cleaned up successfully")
 
     def get_stt_service(self) -> Optional[STTService]:
         """Get the STT service instance"""

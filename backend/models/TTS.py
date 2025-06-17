@@ -6,6 +6,7 @@ import asyncio
 from typing import Optional, List, Union
 from dataclasses import dataclass
 from pydantic import BaseModel
+from concurrent.futures import ThreadPoolExecutor
 
 import torch
 import numpy as np
@@ -66,6 +67,12 @@ class TTSService:
         self.config = config
         self.device = self._get_device()
         self.torch_dtype = self._get_torch_dtype()
+
+        # Create dedicated ThreadPoolExecutor to avoid semaphore leaks
+        # Use thread_name_prefix and ensure proper cleanup
+        self.executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="tts", initializer=None, initargs=()
+        )
 
         # Pipeline components
         self.model = None
@@ -147,6 +154,17 @@ class TTSService:
             self.processor = None
             self.vocoder = None
             self.speaker_embeddings = None
+
+        # Shutdown the executor to prevent semaphore leaks
+        if hasattr(self, "executor") and self.executor:
+            try:
+                # First try immediate shutdown, then wait
+                self.executor.shutdown(wait=False)
+                self.executor.shutdown(wait=True)
+            except Exception as e:
+                logger.warning(f"Error shutting down TTS executor: {e}")
+            finally:
+                self.executor = None
 
     def _get_token_count(self, text: str) -> int:
         """Estimate token count for the text"""
@@ -242,10 +260,10 @@ class TTSService:
             processed_text = self._preprocess_text(request.text)
             logger.info(f"Synthesizing speech for: {processed_text[:100]}...")
 
-            # Run in executor to avoid blocking the event loop
+            # Run in dedicated executor to avoid blocking the event loop
             loop = asyncio.get_event_loop()
             audio_data = await loop.run_in_executor(
-                None, self._generate_speech, processed_text
+                self.executor, self._generate_speech, processed_text
             )
 
             # Post-process audio
