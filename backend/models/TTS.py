@@ -119,10 +119,19 @@ class TTSService:
             self.vocoder = SpeechT5HifiGan.from_pretrained(self.config.vocoder_name, torch_dtype=self.torch_dtype)
             self.vocoder.to(self.device)
 
-            # Load speaker embeddings dataset
-            embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
-            speaker_embeddings = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
-            self.speaker_embeddings = speaker_embeddings.to(self.device)
+            # Load speaker embeddings dataset with fallback
+            try:
+                embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation", download_mode="force_redownload", cache_dir=None)
+                speaker_embeddings = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
+                self.speaker_embeddings = speaker_embeddings.to(self.device)
+                logger.info("Loaded speaker embeddings from dataset")
+            except Exception as e:
+                logger.warning(f"Failed to load speaker embeddings: {e}")
+                logger.info("Using default speaker embeddings")
+                # Create default speaker embedding (512-dim vector for SpeechT5)
+                # Based on typical xvector embedding size for SpeechT5
+                default_embedding = torch.randn(1, 512, dtype=self.torch_dtype)
+                self.speaker_embeddings = default_embedding.to(self.device)
 
             logger.info("TTS pipeline loaded successfully")
 
