@@ -4,14 +4,20 @@ Background Multimodal LLM Backend Server
 Handles WebSocket connections for screen sharing and voice assistant functionality.
 """
 
+# Load environment variables first
+import pathlib
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+current_dir = pathlib.Path(__file__).parent
+env_path = current_dir / ".env"
+load_dotenv(dotenv_path=env_path)
+
 import json
 import logging
-import signal
-import sys
-import asyncio
+import time
 from typing import Dict, List, Any
 from datetime import datetime
-import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -86,9 +92,7 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket):
         try:
-            logger.info(
-                f"Attempting to accept WebSocket connection from {websocket.client.host if websocket.client else 'unknown'}"
-            )
+            logger.info(f"Attempting to accept WebSocket connection from {websocket.client.host if websocket.client else 'unknown'}")
             await websocket.accept()
             self.active_connections.append(websocket)
             self.connection_attempts[websocket] = 0
@@ -97,9 +101,7 @@ class ConnectionManager:
                 "screen_share_on": False,
                 "voice_assistant_on": False,
             }
-            logger.info(
-                f"WebSocket connection accepted from {websocket.client.host if websocket.client else 'unknown'}. Total connections: {len(self.active_connections)}"
-            )
+            logger.info(f"WebSocket connection accepted from {websocket.client.host if websocket.client else 'unknown'}. Total connections: {len(self.active_connections)}")
         except Exception as e:
             logger.error(f"Failed to accept WebSocket connection: {str(e)}")
             raise
@@ -408,8 +410,13 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
         return
 
     try:
+        # Add debug logging for VAD processing
+        logger.info(f"Processing audio with VAD - samples: {len(audio_data)}, VAD info: {vad_info}")
+
         # Process audio with VAD information to manage speech sessions
         audio_chunk = stt_service.process_audio_with_vad(audio_data, sample_rate, vad_info, timestamp)
+
+        logger.info(f"VAD processing result - audio_chunk returned: {audio_chunk is not None}")
 
         if audio_chunk:
             # We have a complete speech session ready for transcription
@@ -432,14 +439,13 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
                 await manager.send_personal_message(json.dumps(response), websocket)
 
                 # Use new flow that checks for screen triggers first
-                await handle_transcription_with_screen_check(
-                    websocket, transcription.text, transcription.timestamp, screen_image
-                )
+                await handle_transcription_with_screen_check(websocket, transcription.text, transcription.timestamp, screen_image)
 
             else:
                 logger.debug("Empty transcription result")
         else:
             # Audio is being accumulated in current speech session
+            logger.info(f"Audio being accumulated - VAD isSpeaking: {vad_info.get('isSpeaking', False)}")
             # Optionally send partial feedback to client
             if vad_info.get("isSpeaking", False):
                 response = {
@@ -452,6 +458,9 @@ async def handle_audio_data(websocket: WebSocket, message: Dict[str, Any]):
 
     except Exception as e:
         logger.error(f"Error processing audio: {e}")
+        import traceback
+
+        logger.error(f"Audio processing traceback: {traceback.format_exc()}")
 
         # Send error response
         response = {
@@ -468,7 +477,7 @@ async def handle_vad_state(websocket: WebSocket, message: Dict[str, Any]):
     timestamp = message.get("timestamp")
     vad_info = message.get("vad", {})
 
-    logger.debug(f"Received VAD state: {vad_info} at {timestamp}")
+    logger.info(f"Received VAD state: {vad_info} at {timestamp}")
 
     # Get STT service
     stt_service = service_manager.get_stt_service()
@@ -478,9 +487,10 @@ async def handle_vad_state(websocket: WebSocket, message: Dict[str, Any]):
 
     try:
         # Process VAD state change (typically silence) to potentially end speech sessions
-        audio_chunk = stt_service.process_audio_with_vad(
-            [], 16000, vad_info, timestamp  # Empty audio data for state-only updates
-        )
+        logger.info(f"Processing VAD state change - VAD info: {vad_info}")
+        audio_chunk = stt_service.process_audio_with_vad([], 16000, vad_info, timestamp)  # Empty audio data for state-only updates
+
+        logger.info(f"VAD state processing result - audio_chunk returned: {audio_chunk is not None}")
 
         if audio_chunk:
             # Speech session ended due to silence
@@ -507,9 +517,14 @@ async def handle_vad_state(websocket: WebSocket, message: Dict[str, Any]):
 
             else:
                 logger.debug("Empty transcription result from silence-ended session")
+        else:
+            logger.info("VAD state change - no speech session to complete")
 
     except Exception as e:
         logger.error(f"Error processing VAD state: {e}")
+        import traceback
+
+        logger.error(f"VAD state processing traceback: {traceback.format_exc()}")
 
         # Send error response
         response = {
@@ -649,9 +664,7 @@ async def handle_transcription_with_screen_check(
     logger.info(f"Needs screen capture: {needs_screen_capture}")
 
     if needs_screen_capture["should_capture"] and needs_screen_capture["confidence"] >= 0.6:
-        logger.info(
-            f"Screen capture recommended for text: '{text}' (confidence: {needs_screen_capture['confidence']:.2f})"
-        )
+        logger.info(f"Screen capture recommended for text: '{text}' (confidence: {needs_screen_capture['confidence']:.2f})")
 
         # Send screen capture request to frontend and store the context for later
         screen_request = {
@@ -665,9 +678,7 @@ async def handle_transcription_with_screen_check(
             "original_timestamp": timestamp,
         }
 
-        logger.info(
-            f"Requesting screen capture: {needs_screen_capture['reason']} (confidence: {needs_screen_capture['confidence']:.2f})"
-        )
+        logger.info(f"Requesting screen capture: {needs_screen_capture['reason']} (confidence: {needs_screen_capture['confidence']:.2f})")
         await manager.send_personal_message(json.dumps(screen_request), websocket)
 
         # Don't process with multimodal LLM yet - wait for screen capture response
@@ -687,10 +698,7 @@ async def handle_screen_capture_response(websocket: WebSocket, message: Dict[str
     if not original_timestamp:
         original_timestamp = message.get("timestamp", time.time())
 
-    logger.info(
-        f"Screen capture response - has image: {bool(screen_image)}, "
-        f"original_text: '{original_text}', message keys: {list(message.keys())}"
-    )
+    logger.info(f"Screen capture response - has image: {bool(screen_image)}, " f"original_text: '{original_text}', message keys: {list(message.keys())}")
 
     if screen_image and original_text:
         logger.info("Received screen capture, processing with visual context")
@@ -698,10 +706,7 @@ async def handle_screen_capture_response(websocket: WebSocket, message: Dict[str
         # Process with the original transcription timestamp for proper session continuity
         await process_with_multimodal_llm(websocket, original_text, original_timestamp, screen_image)
     else:
-        logger.warning(
-            f"Invalid screen capture response - screen_image present: "
-            f"{bool(screen_image)}, original_text: '{original_text}'"
-        )
+        logger.warning(f"Invalid screen capture response - screen_image present: " f"{bool(screen_image)}, original_text: '{original_text}'")
 
 
 async def process_with_multimodal_llm(
@@ -835,7 +840,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8000,  # Changed from 8000 to 8001
         reload=True,
         log_level="debug",
         access_log=True,

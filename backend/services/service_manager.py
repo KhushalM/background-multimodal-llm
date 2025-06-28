@@ -8,7 +8,12 @@ from models.multimodal import MultimodalService, create_multimodal_service
 from models.TTS import TTSService, create_tts_service
 
 # Load environment variables
-load_dotenv()
+# Try to load from multiple possible locations
+import pathlib
+
+current_dir = pathlib.Path(__file__).parent.parent  # backend directory
+env_path = current_dir / ".env"
+load_dotenv(dotenv_path=env_path)
 
 logger = logging.getLogger(__name__)
 
@@ -21,25 +26,33 @@ class ServiceManager:
         self.multimodal_service: Optional[MultimodalService] = None
         self.tts_service: Optional[TTSService] = None
 
-        # API tokens from environment (only Gemini is needed now)
+        # API tokens from environment
         self.gemini_token = os.getenv("GEMINI_API_KEY")
+        self.openai_token = os.getenv("OPENAI_API_KEY")
+
+        # Debug environment loading
+        logger.debug(f"Environment loading from: {env_path}")
+        logger.debug(f"OpenAI key found: {'Yes' if self.openai_token else 'No'}")
+        logger.debug(f"Gemini key found: {'Yes' if self.gemini_token else 'No'}")
 
     async def initialize_services(self):
         """Initialize all AI services"""
         try:
-            # Initialize STT service (now uses local pipeline, no token needed)
-            logger.info("Initializing STT service with local pipeline...")
-            self.stt_service = await create_stt_service(model_name="distil-whisper/distil-large-v3.5")
-            await self.stt_service.__aenter__()  # Initialize the pipeline
-            logger.info("STT service initialized successfully")
+            # Initialize STT service (now uses OpenAI Whisper API)
+            if self.openai_token:
+                logger.info("Initializing STT service with OpenAI Whisper...")
+                self.stt_service = await create_stt_service(model_name="whisper-1")
+                await self.stt_service.__aenter__()  # Initialize the service
+                logger.info("STT service initialized successfully")
+            else:
+                logger.warning("OPENAI_API_KEY: " + self.openai_token)
+                logger.warning("No OpenAI API key found, STT service not available")
 
             # Initialize Multimodal service (still needs API key)
             if self.gemini_token:
                 logger.info("Initializing Multimodal service with screen context...")
-                self.multimodal_service = await create_multimodal_service(
-                    api_key=self.gemini_token, model_name="gemini-2.0-flash-exp"
-                )
-                logger.info("Multimodal service with screen context initialized successfully")
+                self.multimodal_service = await create_multimodal_service(api_key=self.gemini_token, model_name="gemini-2.0-flash-exp")
+                logger.info("Multimodal service with screen context initialized " "successfully")
             else:
                 logger.warning("No Gemini API key found, Multimodal service not available")
 

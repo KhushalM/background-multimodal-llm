@@ -1,9 +1,7 @@
-import os
 import time
 import logging
-import io
 import asyncio
-from typing import Optional, List, Union
+from typing import Optional, List
 from dataclasses import dataclass
 from pydantic import BaseModel
 from concurrent.futures import ThreadPoolExecutor
@@ -11,13 +9,11 @@ from concurrent.futures import ThreadPoolExecutor
 import torch
 import numpy as np
 from transformers import (
-    pipeline,
     SpeechT5Processor,
     SpeechT5ForTextToSpeech,
     SpeechT5HifiGan,
 )
 from datasets import load_dataset
-import soundfile as sf
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +65,6 @@ class TTSService:
         self.torch_dtype = self._get_torch_dtype()
 
         # Create dedicated ThreadPoolExecutor to avoid semaphore leaks
-        # Use thread_name_prefix and ensure proper cleanup
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tts", initializer=None, initargs=())
 
         # Pipeline components
@@ -78,7 +73,7 @@ class TTSService:
         self.vocoder = None
         self.speaker_embeddings = None
 
-        logger.info(f"TTS service initialized with device: {self.device}, dtype: {self.torch_dtype}")
+        logger.info(f"TTS service initialized with device: {self.device}, " f"dtype: {self.torch_dtype}")
 
     def _get_device(self) -> str:
         """Determine the best device to use"""
@@ -128,10 +123,12 @@ class TTSService:
             except Exception as e:
                 logger.warning(f"Failed to load external embeddings: {e}")
                 logger.info("Using model's built-in compatible speaker embeddings")
-                # Use SpeechT5's expected embedding distribution for better quality
-                # This avoids downloads and uses model-compatible embeddings
+                # Use SpeechT5's expected embedding distribution for
+                # better quality. This avoids downloads and uses
+                # model-compatible embeddings
                 default_embedding = torch.zeros(1, 512, dtype=self.torch_dtype)
-                # Initialize with small random values in the expected range for SpeechT5
+                # Initialize with small random values in the expected range
+                # for SpeechT5
                 torch.nn.init.normal_(default_embedding, mean=0.0, std=0.1)
                 self.speaker_embeddings = default_embedding.to(self.device)
 
@@ -172,7 +169,7 @@ class TTSService:
                 # Use the actual tokenizer for accurate count
                 inputs = self.processor(text=text, return_tensors="pt")
                 return inputs["input_ids"].shape[1]
-            except:
+            except Exception:
                 pass
 
         # Fallback: rough estimate (1 token ≈ 4 characters)
@@ -251,9 +248,6 @@ class TTSService:
                 # Blend original with smoothed (90% original, 10% smoothed)
                 audio_data = 0.9 * audio_data + 0.1 * smoothed
 
-        # if np.max(np.abs(audio_data)) > 0:
-        #     audio_data = audio_data / np.max(np.abs(audio_data)) * 0.8
-
         return audio_data
 
     async def synthesize_speech(self, request: TTSRequest) -> TTSResponse:
@@ -262,7 +256,7 @@ class TTSService:
 
         try:
             if self.model is None or self.processor is None:
-                raise RuntimeError("TTS pipeline not initialized. Use 'async with' context manager.")
+                raise RuntimeError("TTS pipeline not initialized. Use 'async with' " "context manager.")
 
             # Preprocess text
             processed_text = self._preprocess_text(request.text)
@@ -277,7 +271,7 @@ class TTSService:
             duration = len(audio_data) / self.config.sample_rate
             processing_time = time.time() - start_time
 
-            logger.info(f"Generated {duration:.2f}s of audio in {processing_time:.2f}s")
+            logger.info(f"Generated {duration:.2f}s of audio in " f"{processing_time:.2f}s")
 
             return TTSResponse(
                 audio_data=audio_data.tolist(),

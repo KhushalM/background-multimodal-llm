@@ -3,10 +3,11 @@ import asyncio
 import logging
 import numpy as np
 import time
+import io
+import os
 from typing import Optional, List, AsyncGenerator
 from dataclasses import dataclass
-import torch
-from transformers import pipeline, AutoProcessor, AutoModelForSpeechSeq2Seq
+import openai
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
@@ -16,14 +17,15 @@ logger = logging.getLogger(__name__)
 class STTConfig:
     """Configuration for Speech-to-Text service"""
 
-    model_name: str = "distil-whisper/distil-large-v3.5"
-    device: str = "auto"  # "auto", "cpu", or "cuda"
-    torch_dtype: str = "auto"  # "auto", "float16", "float32"
+    model_name: str = "whisper-1"  # OpenAI Whisper model
+    api_key: Optional[str] = None  # Will use OPENAI_API_KEY env var if not provided
     sample_rate: int = 16000
     min_speech_duration: float = 0.5  # Minimum speech duration to process (seconds)
     max_speech_duration: float = 30.0  # Maximum speech duration to prevent memory issues
     max_retries: int = 3
-    use_flash_attention_2: bool = False  # Set to True if supported
+    language: Optional[str] = None  # Auto-detect if None
+    temperature: float = 0.0  # For consistent transcriptions
+    response_format: str = "json"  # json, text, srt, verbose_json, or vtt
 
 
 class AudioChunk(BaseModel):
@@ -76,98 +78,45 @@ class SpeechSession:
 
 
 class STTService:
-    """Speech-to-Text service using HuggingFace Transformers pipeline"""
+    """Speech-to-Text service using OpenAI Whisper API"""
 
     def __init__(self, config: STTConfig):
         self.config = config
-        self.pipeline = None
-        self.device = self._get_device()
-        self.torch_dtype = self._get_torch_dtype()
+
+        # Initialize OpenAI client
+        api_key = config.api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment " "variable or pass api_key in config.")
+
+        self.client = openai.OpenAI(api_key=api_key)
 
         # Create dedicated ThreadPoolExecutor to avoid semaphore leaks
-        # Use thread_name_prefix and ensure proper cleanup
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="stt", initializer=None, initargs=())
 
         # Speech session management
         self.current_session: Optional[SpeechSession] = None
         self.session_counter = 0
 
-        logger.info(f"STT service initialized with device: {self.device}, dtype: {self.torch_dtype}")
-
-    def _get_device(self) -> str:
-        """Determine the best device to use"""
-        if self.config.device == "auto":
-            if torch.cuda.is_available():
-                return "cuda"
-            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                return "mps"  # Apple Silicon GPU
-            else:
-                return "cpu"
-        return self.config.device
-
-    def _get_torch_dtype(self):
-        """Determine the best torch dtype to use"""
-        if self.config.torch_dtype == "auto":
-            if self.device == "cuda":
-                return torch.float16
-            else:
-                return torch.float32
-        elif self.config.torch_dtype == "float16":
-            return torch.float16
-        else:
-            return torch.float32
+        logger.info(f"STT service initialized with OpenAI Whisper model: " f"{self.config.model_name}")
 
     async def __aenter__(self):
-        """Initialize the pipeline asynchronously"""
+        """Initialize the service asynchronously"""
         try:
-            logger.info(f"Loading STT model: {self.config.model_name}")
-
-            # Load model and processor
-            model = AutoModelForSpeechSeq2Seq.from_pretrained(
-                self.config.model_name,
-                torch_dtype=self.torch_dtype,
-                low_cpu_mem_usage=True,
-                use_safetensors=True,
-                attn_implementation=("flash_attention_2" if self.config.use_flash_attention_2 else None),
-            )
-            model.to(self.device)
-
-            processor = AutoProcessor.from_pretrained(self.config.model_name)
-
-            # Create pipeline
-            self.pipeline = pipeline(
-                "automatic-speech-recognition",
-                model=model,
-                tokenizer=processor.tokenizer,
-                feature_extractor=processor.feature_extractor,
-                max_new_tokens=128,
-                chunk_length_s=30,
-                batch_size=16,
-                return_timestamps=True,
-                torch_dtype=self.torch_dtype,
-                device=self.device,
-            )
-
-            logger.info("STT pipeline loaded successfully")
-
+            # Test API connection with a minimal request
+            logger.info("Testing OpenAI API connection...")
+            # We'll test the connection when we make the first actual request
+            logger.info("STT service ready")
         except Exception as e:
-            logger.error(f"Error loading STT pipeline: {e}")
+            logger.error(f"Error initializing STT service: {e}")
             raise
 
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Cleanup resources"""
-        if self.pipeline is not None:
-            # Clear CUDA cache if using GPU
-            if self.device == "cuda":
-                torch.cuda.empty_cache()
-            self.pipeline = None
-
         # Shutdown the executor to prevent semaphore leaks
         if hasattr(self, "executor") and self.executor:
             try:
-                # First try immediate shutdown, then wait
                 self.executor.shutdown(wait=False)
                 self.executor.shutdown(wait=True)
             except Exception as e:
@@ -176,12 +125,13 @@ class STTService:
                 self.executor = None
 
     def _preprocess_audio(self, audio_data: List[float], sample_rate: int) -> np.ndarray:
-        """Convert audio data to the format expected by Whisper"""
+        """Convert audio data to the format expected by OpenAI Whisper"""
         try:
             # Convert to numpy array
             audio_array = np.array(audio_data, dtype=np.float32)
 
-            # Resample if necessary (Whisper expects 16kHz)
+            # Resample if necessary (Whisper can handle various sample rates,
+            # but 16kHz is optimal)
             if sample_rate != self.config.sample_rate:
                 # Simple resampling (for production, use librosa)
                 ratio = self.config.sample_rate / sample_rate
@@ -202,56 +152,131 @@ class STTService:
             logger.error(f"Error preprocessing audio: {e}")
             raise
 
+    def _audio_to_wav_bytes(self, audio_array: np.ndarray, sample_rate: int) -> bytes:
+        """Convert numpy audio array to WAV bytes for OpenAI API"""
+        try:
+            import wave
+
+            # Create WAV file in memory
+            wav_buffer = io.BytesIO()
+
+            with wave.open(wav_buffer, "wb") as wav_file:
+                wav_file.setnchannels(1)  # Mono
+                wav_file.setsampwidth(2)  # 16-bit
+                wav_file.setframerate(sample_rate)
+
+                # Convert float32 to int16
+                audio_int16 = (audio_array * 32767).astype(np.int16)
+                wav_file.writeframes(audio_int16.tobytes())
+
+            wav_buffer.seek(0)
+            return wav_buffer.getvalue()
+
+        except Exception as e:
+            logger.error(f"Error converting audio to WAV: {e}")
+            raise
+
+    async def _transcribe_with_openai(self, audio_array: np.ndarray, sample_rate: int) -> str:
+        """Transcribe audio using OpenAI Whisper API"""
+        try:
+            # Convert audio to WAV format
+            wav_bytes = self._audio_to_wav_bytes(audio_array, sample_rate)
+
+            # Create a file-like object for the API
+            audio_file = io.BytesIO(wav_bytes)
+            audio_file.name = "audio.wav"  # OpenAI API requires a filename
+
+            # Make API call
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                self.executor,
+                lambda: self.client.audio.transcriptions.create(
+                    model=self.config.model_name, file=audio_file, language=self.config.language, temperature=self.config.temperature, response_format=self.config.response_format
+                ),
+            )
+
+            # Extract text based on response format
+            if self.config.response_format == "json":
+                return response.text
+            elif self.config.response_format == "verbose_json":
+                return response.text
+            else:
+                return str(response)
+
+        except Exception as e:
+            logger.error(f"Error transcribing with OpenAI: {e}")
+            raise
+
     async def transcribe_chunk(self, audio_chunk: AudioChunk) -> TranscriptionResult:
-        """Transcribe a single audio chunk"""
+        """Transcribe an audio chunk using OpenAI Whisper API"""
+        if not audio_chunk or not audio_chunk.data:
+            return TranscriptionResult(
+                text="",
+                timestamp=audio_chunk.timestamp if audio_chunk else time.time(),
+                chunk_id=audio_chunk.chunk_id if audio_chunk else None,
+                processing_time=0.0,
+            )
+
         start_time = time.time()
 
         try:
-            if self.pipeline is None:
-                raise RuntimeError("STT pipeline not initialized. Use 'async with' context manager.")
+            # Check duration
+            duration = len(audio_chunk.data) / audio_chunk.sample_rate
+            if duration < self.config.min_speech_duration:
+                logger.debug(f"Audio chunk too short: {duration:.2f}s < " f"{self.config.min_speech_duration}s")
+                return TranscriptionResult(
+                    text="",
+                    timestamp=audio_chunk.timestamp,
+                    chunk_id=audio_chunk.chunk_id,
+                    processing_time=time.time() - start_time,
+                )
+
+            if duration > self.config.max_speech_duration:
+                logger.warning(f"Audio chunk too long: {duration:.2f}s > " f"{self.config.max_speech_duration}s, truncating")
+                max_samples = int(self.config.max_speech_duration * audio_chunk.sample_rate)
+                audio_chunk.data = audio_chunk.data[:max_samples]
 
             # Preprocess audio
             audio_array = self._preprocess_audio(audio_chunk.data, audio_chunk.sample_rate)
 
-            # Run inference with pipeline
-            # Run in dedicated executor to avoid blocking the event loop
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                self.executor,
-                lambda: self.pipeline(  # type: ignore
-                    audio_array,
-                    generate_kwargs={"language": "english"},
-                    return_timestamps=True,
-                ),
-            )
-
-            # Extract text from result
+            # Transcribe with retries
             text = ""
-            if isinstance(result, dict):
-                text = result.get("text", "").strip()
-            elif isinstance(result, list) and len(result) > 0:
-                text = result[0].get("text", "").strip()
+            last_error = None
+
+            for attempt in range(self.config.max_retries):
+                try:
+                    text = await self._transcribe_with_openai(audio_array, audio_chunk.sample_rate)
+                    break
+                except Exception as e:
+                    last_error = e
+                    if attempt < self.config.max_retries - 1:
+                        wait_time = 2**attempt  # Exponential backoff
+                        logger.warning(f"Transcription attempt {attempt + 1} failed, " f"retrying in {wait_time}s: {e}")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(f"All transcription attempts failed: {e}")
+                        raise e
 
             processing_time = time.time() - start_time
 
-            logger.info(f"Transcribed speech session: '{text}' in {processing_time:.2f}s")
-
-            return TranscriptionResult(
-                text=text,
+            result = TranscriptionResult(
+                text=text.strip(),
                 timestamp=audio_chunk.timestamp,
                 chunk_id=audio_chunk.chunk_id,
                 processing_time=processing_time,
             )
 
-        except Exception as e:
-            logger.error(f"Error in transcribe_chunk: {e}")
+            logger.debug(f"Transcribed in {processing_time:.2f}s: " f"'{result.text[:50]}{'...' if len(result.text) > 50 else ''}'")
+            return result
 
-            # Return empty result on failure
+        except Exception as e:
+            processing_time = time.time() - start_time
+            logger.error(f"Error transcribing audio chunk: {e}")
             return TranscriptionResult(
                 text="",
                 timestamp=audio_chunk.timestamp,
                 chunk_id=audio_chunk.chunk_id,
-                processing_time=time.time() - start_time,
+                processing_time=processing_time,
             )
 
     def process_audio_with_vad(
@@ -262,127 +287,106 @@ class STTService:
         timestamp: float,
     ) -> Optional[AudioChunk]:
         """
-        Process audio data with VAD information to manage speech sessions
+        Process audio data with VAD information to manage speech sessions.
 
         Args:
             audio_data: Raw audio samples
             sample_rate: Audio sample rate
-            vad_info: VAD information containing isSpeaking, energy, confidence
+            vad_info: VAD information containing speech detection results
             timestamp: Timestamp of the audio data
 
         Returns:
-            AudioChunk if a complete speech session is ready for transcription, None otherwise
+            AudioChunk if speech session is complete, None if still accumulating
         """
-        is_speaking = vad_info.get("isSpeaking", False)
+        try:
+            is_speech = vad_info.get("isSpeaking", False)  # Use frontend's key
+            speech_probability = vad_info.get("confidence", 0.0)  # Use frontend's key
 
-        # Handle complete speech session sent as single chunk (frontend batch mode)
-        if not is_speaking and len(audio_data) > 0:
-            session_duration = len(audio_data) / sample_rate
-
-            # Check if this is a complete speech session (has sufficient duration)
-            if session_duration >= self.config.min_speech_duration:
-                logger.info(f"Processing complete speech session: {session_duration:.2f}s of audio")
-
-                # Create audio chunk directly from the complete session
-                session_id = f"batch_session_{int(timestamp)}"
-                audio_chunk = AudioChunk(
-                    data=audio_data,
-                    sample_rate=sample_rate,
-                    timestamp=timestamp,
-                    chunk_id=session_id,
-                )
-
-                # Clear any existing session since we got a complete one
-                if self.current_session is not None:
-                    logger.debug("Clearing existing session for batch processing")
-                    self.current_session = None
-
-                return audio_chunk
-            else:
-                logger.debug(f"Batch audio too short ({session_duration:.2f}s), discarding")
-                # Clear any existing session
-                if self.current_session is not None:
-                    self.current_session = None
-                return None
-
-        # Original streaming logic for incremental audio processing
-        if is_speaking:
-            # Speech is active
-            if self.current_session is None:
-                # Start new speech session
+            # If this is speech and we don't have an active session, start one
+            if is_speech and self.current_session is None:
                 self.session_counter += 1
-                session_id = f"session_{self.session_counter}_{int(timestamp)}"
+                session_id = f"{int(timestamp)}_{self.session_counter}"
                 self.current_session = SpeechSession(session_id, timestamp)
-                logger.debug(f"Started new speech session: {session_id}")
+                logger.info(f"Started new speech session: {session_id}")
 
-            # Add audio to current session
-            self.current_session.add_audio(audio_data, timestamp)
-
-            # Check if session is getting too long (prevent memory issues)
-            if self.current_session.get_duration() > self.config.max_speech_duration:
-                logger.warning(
-                    f"Speech session exceeded max duration ({self.config.max_speech_duration}s), forcing completion"
-                )
-                return self._complete_current_session()
-
-        else:
-            # Speech has ended (for streaming mode)
+            # If we have an active session, add audio to it
             if self.current_session is not None:
-                # Complete the current session
-                return self._complete_current_session()
+                self.current_session.add_audio(audio_data, timestamp)
 
-        return None
+                # Check if we should complete the session
+                session_duration = self.current_session.get_duration()
+
+                # Complete session if:
+                # 1. No longer detecting speech (end of speech)
+                # 2. Session has reached maximum duration
+                # 3. There's a significant gap in audio timestamps
+                time_gap = timestamp - self.current_session.last_audio_timestamp
+                should_complete = (
+                    not is_speech or session_duration >= self.config.max_speech_duration or time_gap > 2.0  # End of speech detected  # Max duration reached  # Significant time gap (> 2 seconds)
+                )
+
+                if should_complete:
+                    return self._complete_current_session()
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error processing audio with VAD: {e}")
+            # If there's an error, try to complete the current session
+            if self.current_session is not None:
+                return self._complete_current_session()
+            return None
 
     def _complete_current_session(self) -> Optional[AudioChunk]:
-        """Complete the current speech session and return it as an AudioChunk"""
+        """Complete the current speech session and return the accumulated audio"""
         if self.current_session is None:
             return None
 
-        session_duration = self.current_session.get_duration()
+        try:
+            # Check if we have enough audio to process
+            duration = self.current_session.get_duration()
+            if duration < self.config.min_speech_duration:
+                logger.debug(f"Speech session too short: {duration:.2f}s, discarding")
+                self.current_session = None
+                return None
 
-        # Only process if we have enough audio
-        if session_duration >= self.config.min_speech_duration:
-            logger.info(
-                f"Completing speech session {self.current_session.session_id} with {session_duration:.2f}s of audio"
-            )
+            # Convert to audio chunk
             audio_chunk = self.current_session.to_audio_chunk()
+            session_id = self.current_session.session_id
+
+            # Clear the current session
             self.current_session = None
+
+            logger.info(f"Completed speech session {session_id}: {duration:.2f}s")
             return audio_chunk
-        else:
-            logger.debug(f"Speech session too short ({session_duration:.2f}s), discarding")
+
+        except Exception as e:
+            logger.error(f"Error completing speech session: {e}")
             self.current_session = None
             return None
 
-    # Legacy methods for backward compatibility
     def add_audio_to_buffer(self, audio_data: List[float], sample_rate: int) -> Optional[AudioChunk]:
-        """
-        Legacy method for backward compatibility
-        This method is deprecated - use process_audio_with_vad instead
-        """
-        logger.warning("add_audio_to_buffer is deprecated, use process_audio_with_vad instead")
-
-        # For backward compatibility, assume speech is always active
-        vad_info = {"isSpeaking": True}
-        return self.process_audio_with_vad(audio_data, sample_rate, vad_info, time.time())
+        """Legacy method for backward compatibility - creates a simple audio chunk"""
+        timestamp = time.time()
+        return AudioChunk(data=audio_data, sample_rate=sample_rate, timestamp=timestamp)
 
     async def transcribe_streaming(self, audio_stream) -> AsyncGenerator[TranscriptionResult, None]:
-        """Transcribe streaming audio data"""
-        async for audio_data, sample_rate in audio_stream:
-            # For streaming, assume speech is always active
-            vad_info = {"isSpeaking": True}
-            chunk = self.process_audio_with_vad(audio_data, sample_rate, vad_info, time.time())
-            if chunk:
-                result = await self.transcribe_chunk(chunk)
-                if result.text:  # Only yield non-empty results
-                    yield result
+        """Transcribe streaming audio (placeholder for future implementation)"""
+        # This would require implementing streaming with OpenAI API
+        # For now, we'll process chunks as they come
+        async for audio_chunk in audio_stream:
+            result = await self.transcribe_chunk(audio_chunk)
+            if result.text:
+                yield result
 
     def flush_buffer(self) -> Optional[AudioChunk]:
-        """Flush any remaining speech session"""
-        return self._complete_current_session()
+        """Flush any remaining audio in the buffer"""
+        if self.current_session is not None:
+            return self._complete_current_session()
+        return None
 
 
-# Factory function for easy instantiation
-async def create_stt_service(model_name: str = "distil-whisper/distil-large-v3.5", **config_kwargs) -> STTService:
+async def create_stt_service(model_name: str = "whisper-1", **config_kwargs) -> STTService:
     """Create and initialize STT service"""
     config = STTConfig(model_name=model_name, **config_kwargs)
     return STTService(config)
