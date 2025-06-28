@@ -84,9 +84,9 @@ class STTService:
         self.config = config
 
         # Initialize OpenAI client
-        api_key = config.api_key or os.getenv("OPENAI_API_KEY")
+        api_key = config.api_key or os.getenv("OPENAI_KEY")
         if not api_key:
-            raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment " "variable or pass api_key in config.")
+            raise ValueError("OpenAI API key is required. Set OPENAI_KEY environment " "variable or pass api_key in config.")
 
         self.client = openai.OpenAI(api_key=api_key)
 

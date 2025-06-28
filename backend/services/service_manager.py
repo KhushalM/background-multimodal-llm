@@ -28,7 +28,7 @@ class ServiceManager:
 
         # API tokens from environment
         self.gemini_token = os.getenv("GEMINI_API_KEY")
-        self.openai_token = os.getenv("OPENAI_API_KEY")
+        self.openai_token = os.getenv("OPENAI_KEY")
 
         # Debug environment loading
         logger.debug(f"Environment loading from: {env_path}")
@@ -45,22 +45,25 @@ class ServiceManager:
                 await self.stt_service.__aenter__()  # Initialize the service
                 logger.info("STT service initialized successfully")
             else:
-                logger.warning("OPENAI_API_KEY: " + self.openai_token)
+                logger.warning("OPENAI_KEY: " + str(self.openai_token))
                 logger.warning("No OpenAI API key found, STT service not available")
 
             # Initialize Multimodal service (still needs API key)
             if self.gemini_token:
                 logger.info("Initializing Multimodal service with screen context...")
                 self.multimodal_service = await create_multimodal_service(api_key=self.gemini_token, model_name="gemini-2.0-flash-exp")
-                logger.info("Multimodal service with screen context initialized " "successfully")
+                logger.info("Multimodal service with screen context initialized successfully")
             else:
                 logger.warning("No Gemini API key found, Multimodal service not available")
 
-            # Initialize TTS service (now uses local pipeline, no token needed)
-            logger.info("Initializing TTS service with local pipeline...")
-            self.tts_service = await create_tts_service(model_name="microsoft/speecht5_tts")
-            await self.tts_service.__aenter__()  # Initialize the pipeline
-            logger.info("TTS service initialized successfully")
+            # Initialize TTS service (now uses OpenAI TTS API)
+            if self.openai_token:
+                logger.info("Initializing TTS service with OpenAI TTS...")
+                self.tts_service = await create_tts_service(model_name="tts-1", api_key=self.openai_token)
+                await self.tts_service.__aenter__()  # Initialize the service
+                logger.info("TTS service initialized successfully")
+            else:
+                logger.warning("No OpenAI API key found, TTS service not available")
 
         except Exception as e:
             logger.error(f"Error initializing services: {e}")

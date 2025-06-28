@@ -1,38 +1,30 @@
 import time
 import logging
 import asyncio
+import os
 from typing import Optional, List
 from dataclasses import dataclass
 from pydantic import BaseModel
-from concurrent.futures import ThreadPoolExecutor
-
-import torch
+import io
 import numpy as np
-from transformers import (
-    SpeechT5Processor,
-    SpeechT5ForTextToSpeech,
-    SpeechT5HifiGan,
-)
-from datasets import load_dataset
+import soundfile as sf
+
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class TTSConfig:
-    """Configuration for Text-to-Speech service"""
+    """Configuration for OpenAI Text-to-Speech service"""
 
-    model_name: str = "microsoft/speecht5_tts"
-    vocoder_name: str = "microsoft/speecht5_hifigan"
-    device: str = "auto"  # "auto", "cpu", "cuda", or "mps"
-    torch_dtype: str = "auto"  # "auto", "float16", "float32"
-    voice_preset: str = "neutral"
-    sample_rate: int = 18000  # Increased from 16000 for better quality
+    model: str = "tts-1"  # OpenAI's high-quality TTS model
+    voice: str = "alloy"  # alloy, echo, fable, onyx, nova, shimmer
+    response_format: str = "wav"  # mp3, opus, aac, flac, wav, pcm
+    speed: float = 1.0  # 0.25 to 4.0
+    sample_rate: int = 16000  # Target sample rate for consistency
     max_retries: int = 3
-    # Alternative models:
-    # "microsoft/speecht5_tts" - Good balance of quality and speed
-    # "facebook/mms-tts-eng" - Multilingual support
-    # "suno/bark" - Very natural but slower
+    timeout: float = 30.0
 
 
 class TTSRequest(BaseModel):
@@ -41,7 +33,7 @@ class TTSRequest(BaseModel):
     text: str
     voice_preset: str = "default"
     speed: float = 1.0
-    pitch: float = 1.0
+    pitch: float = 1.0  # Not used in OpenAI TTS, kept for compatibility
     session_id: Optional[str] = None
 
 
@@ -57,126 +49,49 @@ class TTSResponse(BaseModel):
 
 
 class TTSService:
-    """Text-to-Speech service using HuggingFace Transformers pipeline"""
+    """Text-to-Speech service using OpenAI TTS API"""
 
-    def __init__(self, config: TTSConfig):
+    def __init__(self, config: TTSConfig, api_key: str = None):
         self.config = config
-        self.device = self._get_device()
-        self.torch_dtype = self._get_torch_dtype()
 
-        # Create dedicated ThreadPoolExecutor to avoid semaphore leaks
-        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tts", initializer=None, initargs=())
+        # Load API key from parameter or environment (same as STT service)
+        actual_api_key = api_key or os.getenv("OPENAI_KEY")
+        if not actual_api_key:
+            raise ValueError("OpenAI API key is required. Set OPENAI_KEY environment " "variable or pass api_key parameter.")
 
-        # Pipeline components
-        self.model = None
-        self.processor = None
-        self.vocoder = None
-        self.speaker_embeddings = None
+        self.client = AsyncOpenAI(api_key=actual_api_key)
+        self._voice_mapping = {"default": "alloy", "male": "onyx", "female": "nova", "neutral": "echo", "friendly": "alloy", "professional": "fable", "warm": "shimmer"}
 
-        logger.info(f"TTS service initialized with device: {self.device}, " f"dtype: {self.torch_dtype}")
-
-    def _get_device(self) -> str:
-        """Determine the best device to use"""
-        if self.config.device == "auto":
-            if torch.cuda.is_available():
-                return "cuda"
-            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                return "mps"  # Apple Silicon GPU
-            else:
-                return "cpu"
-        return self.config.device
-
-    def _get_torch_dtype(self):
-        """Determine the best torch dtype to use"""
-        if self.config.torch_dtype == "auto":
-            if self.device == "cuda":
-                return torch.float16
-            else:
-                return torch.float32
-        elif self.config.torch_dtype == "float16":
-            return torch.float16
-        else:
-            return torch.float32
+        logger.info(f"OpenAI TTS service initialized with model: {self.config.model}")
 
     async def __aenter__(self):
-        """Initialize the pipeline asynchronously"""
+        """Initialize the service asynchronously"""
         try:
-            logger.info(f"Loading TTS model: {self.config.model_name}")
-
-            # Load processor
-            self.processor = SpeechT5Processor.from_pretrained(self.config.model_name)
-
-            # Load model
-            self.model = SpeechT5ForTextToSpeech.from_pretrained(self.config.model_name, torch_dtype=self.torch_dtype)
-            self.model.to(self.device)
-
-            # Load vocoder
-            self.vocoder = SpeechT5HifiGan.from_pretrained(self.config.vocoder_name, torch_dtype=self.torch_dtype)
-            self.vocoder.to(self.device)
-
-            # Load speaker embeddings dataset with fallback
-            try:
-                embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
-                speaker_embeddings = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
-                self.speaker_embeddings = speaker_embeddings.to(self.device)
-                logger.info("Loaded speaker embeddings from dataset")
-            except Exception as e:
-                logger.warning(f"Failed to load external embeddings: {e}")
-                logger.info("Using model's built-in compatible speaker embeddings")
-                # Use SpeechT5's expected embedding distribution for
-                # better quality. This avoids downloads and uses
-                # model-compatible embeddings
-                default_embedding = torch.zeros(1, 512, dtype=self.torch_dtype)
-                # Initialize with small random values in the expected range
-                # for SpeechT5
-                torch.nn.init.normal_(default_embedding, mean=0.0, std=0.1)
-                self.speaker_embeddings = default_embedding.to(self.device)
-
-            logger.info("TTS pipeline loaded successfully")
+            # Test the service with a simple request
+            logger.info("Testing OpenAI TTS service...")
+            test_result = await self._test_service()
+            if test_result:
+                logger.info("OpenAI TTS service ready")
+            else:
+                logger.warning("OpenAI TTS service test failed")
 
         except Exception as e:
-            logger.error(f"Error loading TTS pipeline: {e}")
+            logger.error(f"Error initializing OpenAI TTS service: {e}")
             raise
 
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Cleanup resources"""
-        if self.model is not None:
-            # Clear CUDA cache if using GPU
-            if self.device == "cuda":
-                torch.cuda.empty_cache()
-            self.model = None
-            self.processor = None
-            self.vocoder = None
-            self.speaker_embeddings = None
+        if hasattr(self.client, "close"):
+            await self.client.close()
 
-        # Shutdown the executor to prevent semaphore leaks
-        if hasattr(self, "executor") and self.executor:
-            try:
-                # First try immediate shutdown, then wait
-                self.executor.shutdown(wait=False)
-                self.executor.shutdown(wait=True)
-            except Exception as e:
-                logger.warning(f"Error shutting down TTS executor: {e}")
-            finally:
-                self.executor = None
-
-    def _get_token_count(self, text: str) -> int:
-        """Estimate token count for the text"""
-        if self.processor:
-            try:
-                # Use the actual tokenizer for accurate count
-                inputs = self.processor(text=text, return_tensors="pt")
-                return inputs["input_ids"].shape[1]
-            except Exception:
-                pass
-
-        # Fallback: rough estimate (1 token ≈ 4 characters)
-        return len(text) // 4
+    def _get_openai_voice(self, voice_preset: str) -> str:
+        """Map voice preset to OpenAI voice"""
+        return self._voice_mapping.get(voice_preset, "alloy")
 
     def _preprocess_text(self, text: str) -> str:
-        """Clean and prepare text for TTS with token limit awareness"""
+        """Clean and prepare text for TTS"""
         # Remove or replace problematic characters
         text = text.strip()
 
@@ -187,7 +102,7 @@ class TTSService:
             "#": "hashtag",
             "$": "dollar",
             "%": "percent",
-            "...": ". ",
+            "...": "...",  # Keep ellipsis as is for OpenAI
             "—": " - ",
             "–": " - ",
         }
@@ -195,19 +110,18 @@ class TTSService:
         for old, new in replacements.items():
             text = text.replace(old, new)
 
-        # SpeechT5 has a maximum token limit of 600 tokens
-        max_tokens = 550  # Leave some buffer
+        # OpenAI TTS has a 4096 character limit
+        max_chars = 4000  # Leave some buffer
 
-        # Check token count and truncate if necessary
-        if self._get_token_count(text) > max_tokens:
-            # Simple sentence splitting
+        if len(text) > max_chars:
+            # Try to split at sentence boundaries
             sentences = text.replace(". ", ".\n").split("\n")
 
-            # Build text up to token limit
+            # Build text up to character limit
             result_text = ""
             for sentence in sentences:
                 test_text = result_text + sentence + ". "
-                if self._get_token_count(test_text) > max_tokens:
+                if len(test_text) > max_chars:
                     break
                 result_text = test_text
 
@@ -215,74 +129,71 @@ class TTSService:
             if result_text.strip():
                 text = result_text.strip()
             else:
-                # Fallback: truncate by characters
-                # Rough estimate: 550 tokens * 4 chars/token = 2200 chars
-                max_chars = 2200
+                # Fallback: truncate at word boundary
                 text = text[:max_chars].rsplit(" ", 1)[0] + "."
 
         return text
 
-    def _postprocess_audio(self, audio_data: np.ndarray, target_sample_rate: int = None) -> np.ndarray:
-        """Post-process audio data"""
-        if target_sample_rate and target_sample_rate != self.config.sample_rate:
-            # Simple resampling
-            ratio = target_sample_rate / self.config.sample_rate
-            new_length = int(len(audio_data) * ratio)
-            audio_data = np.interp(
-                np.linspace(0, len(audio_data) - 1, new_length),
-                np.arange(len(audio_data)),
-                audio_data,
-            )
+    async def _convert_audio_to_samples(self, audio_bytes: bytes) -> np.ndarray:
+        """Convert audio bytes to numpy array samples"""
+        try:
+            # Use soundfile to read the audio data
+            with io.BytesIO(audio_bytes) as audio_buffer:
+                audio_data, original_sample_rate = sf.read(audio_buffer)
 
-        # Gentle normalization to prevent clipping while preserving quality
-        max_amplitude = np.max(np.abs(audio_data))
-        if max_amplitude > 0:
-            # Use softer normalization to preserve audio quality
-            target_amplitude = 0.95  # Less aggressive than 0.8
-            audio_data = audio_data / max_amplitude * target_amplitude
+                # Convert to mono if stereo
+                if len(audio_data.shape) > 1:
+                    audio_data = np.mean(audio_data, axis=1)
 
-            # Apply light smoothing to reduce harsh edges
-            if len(audio_data) > 2:
-                # Simple moving average with window size 3
-                smoothed = np.convolve(audio_data, [0.25, 0.5, 0.25], mode="same")
-                # Blend original with smoothed (90% original, 10% smoothed)
-                audio_data = 0.9 * audio_data + 0.1 * smoothed
+                # Resample to target sample rate if needed
+                if original_sample_rate != self.config.sample_rate:
+                    # Simple resampling using linear interpolation
+                    ratio = self.config.sample_rate / original_sample_rate
+                    new_length = int(len(audio_data) * ratio)
+                    audio_data = np.interp(np.linspace(0, len(audio_data) - 1, new_length), np.arange(len(audio_data)), audio_data)
 
-        return audio_data
+                return audio_data
+
+        except Exception as e:
+            logger.error(f"Error converting audio: {e}")
+            # Return 1 second of silence as fallback
+            return np.zeros(self.config.sample_rate)
 
     async def synthesize_speech(self, request: TTSRequest) -> TTSResponse:
-        """Convert text to speech"""
+        """Convert text to speech using OpenAI TTS"""
         start_time = time.time()
 
         try:
-            if self.model is None or self.processor is None:
-                raise RuntimeError("TTS pipeline not initialized. Use 'async with' " "context manager.")
-
             # Preprocess text
             processed_text = self._preprocess_text(request.text)
-            logger.info(f"Synthesizing speech for: {processed_text[:100]}...")
 
-            # Run in dedicated executor to avoid blocking the event loop
-            loop = asyncio.get_event_loop()
-            audio_data = await loop.run_in_executor(self.executor, self._generate_speech, processed_text)
+            # Get OpenAI voice
+            voice = self._get_openai_voice(request.voice_preset)
 
-            # Post-process audio
-            audio_data = self._postprocess_audio(audio_data)
+            # Adjust speed
+            speed = max(0.25, min(4.0, request.speed))
+
+            logger.info(f"Synthesizing speech with OpenAI: {processed_text[:100]}... " f"(voice: {voice}, speed: {speed})")
+
+            # Call OpenAI TTS API
+            response = await self.client.audio.speech.create(model=self.config.model, voice=voice, input=processed_text, response_format=self.config.response_format, speed=speed)
+
+            # Get audio bytes
+            audio_bytes = await response.aread()
+
+            # Convert to numpy array
+            audio_data = await self._convert_audio_to_samples(audio_bytes)
+
+            # Calculate metrics
             duration = len(audio_data) / self.config.sample_rate
             processing_time = time.time() - start_time
 
-            logger.info(f"Generated {duration:.2f}s of audio in " f"{processing_time:.2f}s")
+            logger.info(f"Generated {duration:.2f}s of audio in {processing_time:.2f}s")
 
-            return TTSResponse(
-                audio_data=audio_data.tolist(),
-                sample_rate=self.config.sample_rate,
-                duration=duration,
-                processing_time=processing_time,
-                text=processed_text,
-            )
+            return TTSResponse(audio_data=audio_data.tolist(), sample_rate=self.config.sample_rate, duration=duration, processing_time=processing_time, text=processed_text, audio_format="wav")
 
         except Exception as e:
-            logger.error(f"Error in synthesize_speech: {e}")
+            logger.error(f"Error in OpenAI TTS synthesize_speech: {e}")
 
             # Return silence on failure
             duration = 1.0  # 1 second of silence
@@ -297,21 +208,6 @@ class TTSService:
                 audio_format="silence",
             )
 
-    def _generate_speech(self, text: str) -> np.ndarray:
-        """Generate speech from text using the loaded model"""
-        # Tokenize text
-        inputs = self.processor(text=text, return_tensors="pt")
-        input_ids = inputs["input_ids"].to(self.device)
-
-        # Generate speech with the model
-        with torch.no_grad():
-            speech = self.model.generate_speech(input_ids, self.speaker_embeddings, vocoder=self.vocoder)
-
-        # Convert to numpy and ensure it's on CPU
-        speech_np = speech.cpu().numpy()
-
-        return speech_np
-
     async def synthesize_batch(self, texts: List[str], session_id: Optional[str] = None) -> List[TTSResponse]:
         """Synthesize multiple texts in batch"""
         responses = []
@@ -321,47 +217,45 @@ class TTSService:
             response = await self.synthesize_speech(request)
             responses.append(response)
 
-            # Small delay between requests to manage memory
+            # Small delay between requests to respect rate limits
             await asyncio.sleep(0.1)
 
         return responses
 
     def get_supported_voices(self) -> List[str]:
         """Get list of supported voice presets"""
-        # For SpeechT5, we use different speaker embeddings
-        # In a full implementation, you could load different embeddings
-        return ["default", "male", "female", "neutral"]
+        return list(self._voice_mapping.keys())
 
-    async def test_synthesis(self) -> bool:
+    async def _test_service(self) -> bool:
         """Test if the TTS service is working"""
         try:
-            test_request = TTSRequest(text="Hello, this is a test.", voice_preset="default")
-
+            test_request = TTSRequest(text="Test.", voice_preset="default")
             response = await self.synthesize_speech(test_request)
             return len(response.audio_data) > 0 and response.audio_format != "silence"
 
         except Exception as e:
-            logger.error(f"TTS test failed: {e}")
+            logger.error(f"OpenAI TTS test failed: {e}")
             return False
+
+    async def test_synthesis(self) -> bool:
+        """Test if the TTS service is working (public method for compatibility)"""
+        return await self._test_service()
 
 
 # Factory function for easy instantiation
-async def create_tts_service(model_name: str = "microsoft/speecht5_tts", **config_kwargs) -> TTSService:
-    """Create and initialize TTS service"""
-    config = TTSConfig(model_name=model_name, **config_kwargs)
+async def create_tts_service(model_name: str = "tts-1", api_key: Optional[str] = None, **config_kwargs) -> TTSService:
+    """Create and initialize OpenAI TTS service"""
 
-    service = TTSService(config)
+    # Map model name for compatibility
+    if model_name == "microsoft/speecht5_tts":
+        model_name = "tts-1"  # Default mapping
+    elif model_name not in ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"]:
+        logger.warning(f"Unknown model {model_name}, using gpt-4o-mini-tts")
+        model_name = "tts-1"
 
-    # Test the service
-    try:
-        async with service:
-            is_working = await service.test_synthesis()
-            if is_working:
-                logger.info("TTS service initialized successfully")
-            else:
-                logger.warning("TTS service test failed, but service created")
-    except Exception as e:
-        logger.error(f"TTS service initialization error: {e}")
-        # Don't raise, allow service to be created anyway
+    config = TTSConfig(model=model_name, **config_kwargs)
+    service = TTSService(config, api_key)  # api_key can be None now
 
+    # Service will be tested when entering async context (in __aenter__)
+    logger.info("OpenAI TTS service created")
     return service
