@@ -86,6 +86,27 @@ export const useScreenShare = ({
       return;
     }
 
+    // Check if we're sharing a browser window and not on the localhost tab
+    if (document.hidden) {
+      onStatusChange('⚠️ Screen capture requested but tab is not active. Please switch to this tab or share your entire screen instead of just the browser window.');
+      
+      // Still attempt capture in case it works
+      const screenImage = await captureScreen();
+      if (screenImage) {
+        sendMessage({
+          type: 'screen_capture_response',
+          screen_image: screenImage,
+          original_text: requestData.original_text,
+          timestamp: Date.now(),
+          request_data: requestData,
+        });
+        onStatusChange('Screen captured and sent for analysis');
+      } else {
+        onStatusChange('❌ Screen capture failed - tab not active. Switch to this tab or share entire screen.');
+      }
+      return;
+    }
+
     onStatusChange(`Capturing screen for: ${requestData.reason}`);
     
     const screenImage = await captureScreen();
@@ -172,7 +193,17 @@ export const useScreenShare = ({
         });
 
         setIsScreenSharing(true);
-        onStatusChange("Screen sharing started");
+        
+        // Detect if user is sharing entire screen vs browser window
+        const track = stream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        const isFullScreen = settings.displaySurface === 'monitor';
+        
+        if (isFullScreen) {
+          onStatusChange("✅ Screen sharing started (entire screen) - works from any window/tab");
+        } else {
+          onStatusChange("⚠️ Screen sharing started (browser window) - stay on this tab for screen capture to work");
+        }
 
         // Remove protection after screen sharing is established
         if (setProtectedOperation) {
