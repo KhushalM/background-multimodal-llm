@@ -5,21 +5,21 @@ import { Box } from "@chakra-ui/react";
 const floatAnimation = `
   @keyframes float {
     0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-4px); }
+    50% { transform: translateY(-2px); }
   }
 `;
 
 const pulseAnimation = `
   @keyframes pulse {
     0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
+    50% { transform: scale(1.02); }
   }
 `;
 
 const waveAnimation = `
   @keyframes wave {
-    0%, 100% { transform: scaleY(0.4); opacity: 0.7; }
-    50% { transform: scaleY(1.2); opacity: 1; }
+    0%, 100% { transform: scaleY(0.5); opacity: 0.8; }
+    50% { transform: scaleY(1.0); opacity: 1; }
   }
 `;
 
@@ -43,15 +43,15 @@ const rippleAnimation = `
 
 const glowAnimation = `
   @keyframes glow {
-    0%, 100% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
-    50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.8); }
+    0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.3); }
+    50% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }
   }
 `;
 
 const screenGlowAnimation = `
   @keyframes screenGlow {
-    0%, 100% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
-    50% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.6); }
+    0%, 100% { box-shadow: 0 0 6px rgba(16, 185, 129, 0.2); }
+    50% { box-shadow: 0 0 12px rgba(16, 185, 129, 0.4); }
   }
 `;
 
@@ -105,8 +105,8 @@ export const AnimatedScreenIcon: React.FC<AnimatedIconProps> = ({
       height={`${size * 0.8}px`}
       style={{
         animation: isActive
-          ? "float 3s ease-in-out infinite"
-          : "float 4s ease-in-out infinite",
+          ? "float 4s ease-in-out infinite"
+          : "float 6s ease-in-out infinite",
       }}
     >
       {/* Monitor Base */}
@@ -151,7 +151,7 @@ export const AnimatedScreenIcon: React.FC<AnimatedIconProps> = ({
         overflow="hidden"
         style={{
           animation: isActive
-            ? "screenGlow 2s ease-in-out infinite"
+            ? "screenGlow 3s ease-in-out infinite"
             : undefined,
         }}
       >
@@ -168,7 +168,7 @@ export const AnimatedScreenIcon: React.FC<AnimatedIconProps> = ({
               background="#10b981"
               borderRadius="1px"
               style={{
-                animation: "pulse 2s ease-in-out infinite",
+                animation: "pulse 3s ease-in-out infinite",
                 animationDelay: "0s",
               }}
             />
@@ -181,8 +181,8 @@ export const AnimatedScreenIcon: React.FC<AnimatedIconProps> = ({
               background="#34d399"
               borderRadius="1px"
               style={{
-                animation: "pulse 2s ease-in-out infinite",
-                animationDelay: "0.3s",
+                animation: "pulse 3s ease-in-out infinite",
+                animationDelay: "0.4s",
               }}
             />
             <Box
@@ -194,8 +194,8 @@ export const AnimatedScreenIcon: React.FC<AnimatedIconProps> = ({
               background="#6ee7b7"
               borderRadius="1px"
               style={{
-                animation: "pulse 2s ease-in-out infinite",
-                animationDelay: "0.6s",
+                animation: "pulse 3s ease-in-out infinite",
+                animationDelay: "0.8s",
               }}
             />
             <Box
@@ -207,8 +207,8 @@ export const AnimatedScreenIcon: React.FC<AnimatedIconProps> = ({
               background="#a7f3d0"
               borderRadius="1px"
               style={{
-                animation: "pulse 2s ease-in-out infinite",
-                animationDelay: "0.9s",
+                animation: "pulse 3s ease-in-out infinite",
+                animationDelay: "1.2s",
               }}
             />
 
@@ -221,7 +221,7 @@ export const AnimatedScreenIcon: React.FC<AnimatedIconProps> = ({
               height="2px"
               background="linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%)"
               style={{
-                animation: "scanline 3s ease-in-out infinite",
+                animation: "scanline 4s ease-in-out infinite",
               }}
             />
           </>
@@ -254,7 +254,7 @@ export const AnimatedScreenIcon: React.FC<AnimatedIconProps> = ({
           borderRadius="50%"
           border="2px solid white"
           style={{
-            animation: "pulse 1.5s ease-in-out infinite",
+            animation: "pulse 2.5s ease-in-out infinite",
           }}
         />
       )}
@@ -317,10 +317,10 @@ export const AnimatedMicIcon: React.FC<AnimatedIconProps> = ({
           background={barColor}
           borderRadius="2px"
           style={{
-            animation: isActive ? "wave 0.6s ease-in-out infinite" : undefined,
-            animationDelay: `${i * 0.1}s`, // Staggered animation
-            boxShadow: isActive ? `0 0 6px ${barColor}60` : "none",
-            transition: "all 0.3s ease",
+            animation: isActive ? "wave 1.2s ease-in-out infinite" : undefined,
+            animationDelay: `${i * 0.15}s`, // Staggered animation
+            boxShadow: isActive ? `0 0 4px ${barColor}40` : "none",
+            transition: "all 0.4s ease",
           }}
         />
       );
@@ -335,8 +335,8 @@ export const AnimatedMicIcon: React.FC<AnimatedIconProps> = ({
       height={`${size}px`}
       style={{
         animation: isActive
-          ? "float 2s ease-in-out infinite"
-          : "float 3s ease-in-out infinite",
+          ? "float 4s ease-in-out infinite"
+          : "float 6s ease-in-out infinite",
       }}
     >
       {/* Waveform Background with ripple effect */}
@@ -354,8 +354,8 @@ export const AnimatedMicIcon: React.FC<AnimatedIconProps> = ({
         borderRadius="12px"
         style={{
           animation: isActive
-            ? "pulse 2s ease-in-out infinite"
-            : "pulse 4s ease-in-out infinite",
+            ? "pulse 3s ease-in-out infinite"
+            : "pulse 6s ease-in-out infinite",
         }}
       />
 
@@ -370,7 +370,7 @@ export const AnimatedMicIcon: React.FC<AnimatedIconProps> = ({
           background="linear-gradient(90deg, transparent 0%, rgba(59, 130, 246, 0.08) 50%, transparent 100%)"
           borderRadius="8px"
           style={{
-            animation: "glow 1.5s ease-in-out infinite",
+            animation: "glow 2.5s ease-in-out infinite",
           }}
         />
       )}
@@ -390,7 +390,7 @@ export const AnimatedMicIcon: React.FC<AnimatedIconProps> = ({
           borderRadius="50%"
           border="1px solid white"
           style={{
-            animation: "pulse 0.8s ease-in-out infinite",
+            animation: "pulse 1.5s ease-in-out infinite",
           }}
         />
       )}
@@ -406,7 +406,7 @@ export const AnimatedMicIcon: React.FC<AnimatedIconProps> = ({
             height="1px"
             background="rgba(59, 130, 246, 0.4)"
             style={{
-              animation: "pulse 1.8s ease-in-out infinite",
+              animation: "pulse 2.5s ease-in-out infinite",
               animationDelay: "0s",
             }}
           />
@@ -418,8 +418,8 @@ export const AnimatedMicIcon: React.FC<AnimatedIconProps> = ({
             height="1px"
             background="rgba(59, 130, 246, 0.4)"
             style={{
-              animation: "pulse 1.8s ease-in-out infinite",
-              animationDelay: "0.6s",
+              animation: "pulse 2.5s ease-in-out infinite",
+              animationDelay: "0.8s",
             }}
           />
         </>
