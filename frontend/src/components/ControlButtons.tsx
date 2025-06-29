@@ -1,5 +1,6 @@
 import React from "react";
 import { Button, HStack } from "@chakra-ui/react";
+import { AnimatedScreenIcon, AnimatedMicIcon } from "./AnimatedIcons";
 
 interface ControlButtonsProps {
   isScreenSharing: boolean;
@@ -32,7 +33,10 @@ export const ControlButtons: React.FC<ControlButtonsProps> = ({
         transition="all 0.2s"
         minW="200px"
       >
-        {isScreenSharing ? "🛑 Stop Sharing" : "🖥️ Share Screen"}
+        <HStack gap={3} align="center">
+          <AnimatedScreenIcon isActive={isScreenSharing} size={32} />
+          <span>{isScreenSharing ? "Stop Sharing" : "Share Screen"}</span>
+        </HStack>
       </Button>
 
       <Button
@@ -51,7 +55,10 @@ export const ControlButtons: React.FC<ControlButtonsProps> = ({
         transition="all 0.2s"
         minW="200px"
       >
-        {isVoiceActive ? "🛑 Stop Voice" : "🎙️ Voice Agent"}
+        <HStack gap={3} align="center">
+          <AnimatedMicIcon isActive={isVoiceActive} size={32} />
+          <span>{isVoiceActive ? "Stop Voice" : "Voice Agent"}</span>
+        </HStack>
       </Button>
     </HStack>
   );
