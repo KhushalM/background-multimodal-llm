@@ -1,18 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Multimodal AI Assistant - Development Stack'
+Description: 'Simple AWS Development Environment for Multimodal AI Assistant'
 
 Parameters:
-  ProjectName:
-    Type: String
-    Default: multimodal-ai-dev
-    Description: Name of the project
-  
   KeyPairName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: EC2 Key Pair for SSH access
+    Type: String
+    Description: Name of an existing EC2 KeyPair to enable SSH access
+    Default: multimodal-ai-dev-key
 
 Resources:
-  # Simple VPC setup
+  # VPC
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -21,40 +17,45 @@ Resources:
       EnableDnsSupport: true
       Tags:
         - Key: Name
-          Value: !Sub ${ProjectName}-vpc
+          Value: multimodal-ai-dev-vpc
 
+  # Internet Gateway
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: !Sub ${ProjectName}-igw
+          Value: multimodal-ai-dev-igw
 
+  # Attach Internet Gateway to VPC
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
 
+  # Public Subnet
   PublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       CidrBlock: 10.0.1.0/24
-      AvailabilityZone: !Select [0, !GetAZs '']
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub ${ProjectName}-public-subnet
+          Value: multimodal-ai-dev-public-subnet
 
+  # Public Route Table
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${ProjectName}-public-rt
+          Value: multimodal-ai-dev-public-rt
 
+  # Public Route
   PublicRoute:
     Type: AWS::EC2::Route
     DependsOn: AttachGateway
@@ -63,13 +64,14 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
-  SubnetRouteTableAssociation:
+  # Associate Route Table with Public Subnet
+  PublicSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicSubnet
       RouteTableId: !Ref PublicRouteTable
 
-  # Security Group - More open for development
+  # Security Group
   DevSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -99,74 +101,20 @@ Resources:
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
-          Description: All outbound traffic
       Tags:
         - Key: Name
-          Value: !Sub ${ProjectName}-dev-sg
+          Value: multimodal-ai-dev-sg
 
-  # Simple IAM Role for EC2
-  EC2Role:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ec2.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
-      Policies:
-        - PolicyName: S3AccessPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
-                Resource: !Sub '${S3Bucket}/*'
-              - Effect: Allow
-                Action:
-                  - s3:ListBucket
-                Resource: !Ref S3Bucket
-
-  EC2InstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Roles:
-        - !Ref EC2Role
-
-  # Simple S3 bucket for file storage
-  S3Bucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub ${ProjectName}-storage-${AWS::AccountId}
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: false
-        BlockPublicPolicy: false
-        IgnorePublicAcls: false
-        RestrictPublicBuckets: false
-      CorsConfiguration:
-        CorsRules:
-          - AllowedHeaders: ['*']
-            AllowedMethods: [GET, POST, PUT, DELETE, HEAD]
-            AllowedOrigins: ['*']
-            MaxAge: 3600
-
-  # EC2 Instance - t3.micro for development (free tier eligible)
+  # EC2 Instance (no IAM role)
   DevServerInstance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: ami-0abcdef1234567890  # Amazon Linux 2023 (update for your region)
+      ImageId: ami-0c6ebb5b9bce4ba15
       InstanceType: t3.micro
       KeyName: !Ref KeyPairName
       SubnetId: !Ref PublicSubnet
       SecurityGroupIds:
         - !Ref DevSecurityGroup
-      IamInstanceProfile: !Ref EC2InstanceProfile
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
@@ -174,7 +122,7 @@ Resources:
             VolumeType: gp3
             DeleteOnTermination: true
       UserData:
-        Fn::Base64: !Sub |
+        Fn::Base64: |
           #!/bin/bash
           yum update -y
           yum install -y docker git
@@ -188,21 +136,13 @@ Resources:
           systemctl enable docker
           usermod -a -G docker ec2-user
           
-          # Install Node.js for development
+          # Install Node.js
           curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
           yum install -y nodejs
-          
-          # Install Python 3.11 and pip
-          yum install -y python3.11 python3.11-pip
           
           # Create application directory
           mkdir -p /opt/app
           chown ec2-user:ec2-user /opt/app
-          
-          # Install AWS CLI v2
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          ./aws/install
           
           # Create simple environment file
           cat > /opt/app/.env << 'EOF'
@@ -213,16 +153,16 @@ Resources:
           OPENAI_API_KEY=placeholder
           GEMINI_API_KEY=placeholder
           HUGGINGFACE_API_TOKEN=placeholder
-          SECRET_KEY=dev-secret-key-change-in-production
+          SECRET_KEY=dev-secret-key
           CORS_ORIGINS=http://localhost:3000,http://localhost:8000
           EOF
           
           chown ec2-user:ec2-user /opt/app/.env
       Tags:
         - Key: Name
-          Value: !Sub ${ProjectName}-dev-server
+          Value: multimodal-ai-dev-server
 
-  # Elastic IP for consistent access
+  # Elastic IP
   ElasticIP:
     Type: AWS::EC2::EIP
     Properties:
@@ -230,41 +170,21 @@ Resources:
       InstanceId: !Ref DevServerInstance
       Tags:
         - Key: Name
-          Value: !Sub ${ProjectName}-dev-eip
+          Value: multimodal-ai-dev-eip
 
 Outputs:
   DevServerPublicIP:
     Description: Public IP address of the development server
     Value: !Ref ElasticIP
-    Export:
-      Name: !Sub ${AWS::StackName}-DevServer-PublicIP
-  
-  DevServerPrivateIP:
-    Description: Private IP address of the development server
-    Value: !GetAtt DevServerInstance.PrivateIp
-    Export:
-      Name: !Sub ${AWS::StackName}-DevServer-PrivateIP
-  
-  S3BucketName:
-    Description: Name of the S3 bucket for file storage
-    Value: !Ref S3Bucket
-    Export:
-      Name: !Sub ${AWS::StackName}-S3-Bucket
   
   SSHCommand:
     Description: SSH command to connect to the development server
     Value: !Sub 'ssh -i ~/.ssh/${KeyPairName}.pem ec2-user@${ElasticIP}'
-    Export:
-      Name: !Sub ${AWS::StackName}-SSH-Command
   
   FrontendURL:
     Description: Frontend development URL
     Value: !Sub 'http://${ElasticIP}:3000'
-    Export:
-      Name: !Sub ${AWS::StackName}-Frontend-URL
   
   BackendURL:
     Description: Backend API URL
-    Value: !Sub 'http://${ElasticIP}:8000'
-    Export:
-      Name: !Sub ${AWS::StackName}-Backend-URL 
+    Value: !Sub 'http://${ElasticIP}:8000' 
