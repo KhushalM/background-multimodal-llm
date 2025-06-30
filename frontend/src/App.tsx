@@ -223,6 +223,7 @@ const App: React.FC = () => {
 
   return (
     <Container maxW="4xl" h="100vh">
+      {/* Force frontend rebuild after env var update - v2 */}
       <Flex direction="column" align="center" justify="center" h="100%" p={8}>
         <VStack gap={8} align="center">
           <VStack gap={4} textAlign="center">

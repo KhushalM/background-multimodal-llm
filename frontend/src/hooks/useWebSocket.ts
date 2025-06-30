@@ -51,6 +51,14 @@ export const useWebSocket = ({ onMessage, onConnectionChange, onStatusChange, on
     // Use environment variable for API URL if available, otherwise fallback to current hostname
     const apiUrl = import.meta.env.REACT_APP_WS_URL || `${protocol}//${window.location.hostname}:8000`;
     const wsUrl = apiUrl.includes('/ws') ? apiUrl : `${apiUrl}/ws`;
+    
+    // Debug logging to see what URL is being used
+    console.log(`🔍 WebSocket Debug:
+    - REACT_APP_WS_URL env var: ${import.meta.env.REACT_APP_WS_URL}
+    - Protocol: ${protocol}
+    - Window hostname: ${window.location.hostname}
+    - Final API URL: ${apiUrl}
+    - Final WebSocket URL: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
