@@ -16,16 +16,16 @@ export default defineConfig({
     ],
     hmr: {
       port: 3000,
-      host: 'e9b5-54-211-160-83.ngrok-free.app'
+      host: '1fbd-54-211-160-83.ngrok-free.app'
     },
     proxy: {
       '/api': {
-        target: 'http://54.211.160.83:8000',
+        target: 'https://32ce-54-211-160-83.ngrok-free.app',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },
       '/ws': {
-        target: 'ws://54.211.160.83:8000',
+        target: 'wss://32ce-54-211-160-83.ngrok-free.app',
         ws: true,
         changeOrigin: true
       }
