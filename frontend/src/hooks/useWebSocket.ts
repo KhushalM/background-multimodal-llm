@@ -209,14 +209,28 @@ export const useWebSocket = ({ onMessage, onConnectionChange, onStatusChange, on
 
   const waitForConnection = useCallback(async (timeoutMs: number = 5000): Promise<boolean> => {
     const startTime = Date.now();
+    console.log(`⏰ Waiting for WebSocket connection (timeout: ${timeoutMs}ms)`);
     
     while (Date.now() - startTime < timeoutMs) {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const currentState = wsRef.current?.readyState;
+      const stateNames: Record<number, string> = {
+        [WebSocket.CONNECTING]: 'CONNECTING',
+        [WebSocket.OPEN]: 'OPEN', 
+        [WebSocket.CLOSING]: 'CLOSING',
+        [WebSocket.CLOSED]: 'CLOSED'
+      };
+      
+      console.log(`WebSocket state: ${currentState !== undefined ? stateNames[currentState] : 'undefined'}`);
+      
+      if (currentState === WebSocket.OPEN) {
+        console.log(`✅ WebSocket connected after ${Date.now() - startTime}ms`);
         return true;
       }
+      
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     
+    console.log(`❌ WebSocket connection timeout after ${timeoutMs}ms`);
     return false;
   }, []);
 

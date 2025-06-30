@@ -216,20 +216,49 @@ export const useVoiceAgent = ({
           setProtectedOperation(true);
         }
 
-        // Wait for actual WebSocket connection
+        // Wait for actual WebSocket connection with more robust retry logic
         if (waitForConnection) {
           onStatusChange("Establishing secure connection...");
-          const connected = await waitForConnection(5000);
+          
+          let connected = false;
+          let attempts = 0;
+          const maxAttempts = 3;
+          
+          while (!connected && attempts < maxAttempts) {
+            attempts++;
+            console.log(`WebSocket connection attempt ${attempts}/${maxAttempts}`);
+            
+            // Wait for connection with increased timeout
+            connected = await waitForConnection(10000); // Increased to 10 seconds
+            
+            if (!connected) {
+              console.log(`Connection attempt ${attempts} failed, checking if already connected...`);
+              
+              // Double-check if we're actually connected (sometimes waitForConnection fails but we are connected)
+              if (isActuallyConnected && isActuallyConnected()) {
+                console.log("✅ Actually connected despite waitForConnection failure");
+                connected = true;
+                break;
+              }
+              
+              if (attempts < maxAttempts) {
+                console.log(`Retrying connection in 1 second...`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Trigger another connection attempt
+                onConnectionChange(true);
+              }
+            }
+          }
           
           if (!connected) {
-            onStatusChange("Failed to connect to server");
+            onStatusChange("Failed to connect to server after multiple attempts");
             if (setProtectedOperation) {
               setProtectedOperation(false);
             }
             return;
           }
           
-          // Verify connection is still active
+          // Final verification that connection is still active
           if (isActuallyConnected && !isActuallyConnected()) {
             onStatusChange("Connection lost during initialization");
             if (setProtectedOperation) {
