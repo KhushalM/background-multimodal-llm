@@ -87,18 +87,18 @@ jobs:
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: ${{ env.EC2_INSTANCE_IP }}
-        username: ec2-user
+        username: ubuntu
         key: ${{ secrets.DEV_EC2_SSH_PRIVATE_KEY }}
         script: |
           echo "🚀 Starting development deployment..."
           
           # Navigate to app directory
-          cd /opt/app
+          cd /home/ubuntu
           
           # Pull latest code
           echo "📥 Pulling latest code..."
-          if [ -d "/opt/app/background-multimodal-llm" ]; then
-            cd /opt/app/background-multimodal-llm
+          if [ -d "/home/ubuntu/background-multimodal-llm" ]; then
+            cd /home/ubuntu/background-multimodal-llm
             git pull origin master || {
               echo "Failed to pull, trying to reset..."
               git reset --hard HEAD
@@ -106,9 +106,9 @@ jobs:
             }
           else
             echo "App directory not found, cloning fresh..."
-            cd /opt/app
+            cd /home/ubuntu
             git clone https://github.com/${{ github.repository }}.git background-multimodal-llm
-            sudo chown -R ec2-user:ec2-user background-multimodal-llm
+            sudo chown -R ubuntu:ubuntu background-multimodal-llm
             cd background-multimodal-llm
           fi
           
