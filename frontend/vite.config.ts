@@ -10,16 +10,16 @@ export default defineConfig({
     strictPort: true,
     hmr: {
       port: 3000,
-      host: 'localhost'
+      host: '54.211.160.83'
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://54.211.160.83:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: 'ws://54.211.160.83:8000',
         ws: true,
         changeOrigin: true
       }
