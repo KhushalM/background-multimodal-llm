@@ -48,7 +48,9 @@ export const useWebSocket = ({ onMessage, onConnectionChange, onStatusChange, on
 
     isConnectingRef.current = true;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.hostname}:8000/ws`;
+    // Use environment variable for API URL if available, otherwise fallback to current hostname
+    const apiUrl = import.meta.env.REACT_APP_WS_URL || `${protocol}//${window.location.hostname}:8000`;
+    const wsUrl = apiUrl.includes('/ws') ? apiUrl : `${apiUrl}/ws`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
