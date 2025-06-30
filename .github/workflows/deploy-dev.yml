@@ -97,14 +97,20 @@ jobs:
           
           # Pull latest code
           echo "📥 Pulling latest code..."
-                      git pull origin master || {
-            echo "Failed to pull code, trying to clone fresh..."
-            cd /opt
-            sudo rm -rf app
-            git clone ${{ github.repositoryUrl }} app
-            sudo chown -R ec2-user:ec2-user app
-            cd app
-          }
+          if [ -d "/opt/app/background-multimodal-llm" ]; then
+            cd /opt/app/background-multimodal-llm
+            git pull origin master || {
+              echo "Failed to pull, trying to reset..."
+              git reset --hard HEAD
+              git pull origin master
+            }
+          else
+            echo "App directory not found, cloning fresh..."
+            cd /opt/app
+            git clone https://github.com/${{ github.repository }}.git background-multimodal-llm
+            sudo chown -R ec2-user:ec2-user background-multimodal-llm
+            cd background-multimodal-llm
+          fi
           
           # Update environment variables with any secrets
           echo "🔐 Updating environment variables..."
@@ -112,14 +118,14 @@ jobs:
             echo "Creating default .env file..."
             cat > .env << 'EOF'
           NODE_ENV=development
-          REACT_APP_API_URL=http://localhost:8000
-          REACT_APP_WS_URL=ws://localhost:8000
+          REACT_APP_API_URL=http://54.211.160.83:8000
+          REACT_APP_WS_URL=ws://54.211.160.83:8000
           DATABASE_URL=sqlite:///app/dev_database.db
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || 'placeholder' }}
           GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY || 'placeholder' }}
           HUGGINGFACE_API_TOKEN=${{ secrets.HUGGINGFACE_API_TOKEN || 'placeholder' }}
           SECRET_KEY=dev-secret-key-change-in-production
-          CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+          CORS_ORIGINS=http://54.211.160.83:3000,http://54.211.160.83:8000
           EOF
           fi
           
