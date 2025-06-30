@@ -16,7 +16,7 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-placeholder}
       - HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN:-placeholder}
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
-      - CORS_ORIGINS=http://54.211.160.83:3000,http://54.211.160.83:8000,https://e9b5-54-211-160-83.ngrok-free.app,https://6669-54-211-160-83.ngrok-free.app
+      - CORS_ORIGINS=http://54.211.160.83:3000,http://54.211.160.83:8000,https://1fbd-54-211-160-83.ngrok-free.app,https://32ce-54-211-160-83.ngrok-free.app
     volumes:
       - ./backend:/app
       - ./backend/uploads:/app/uploads
@@ -39,8 +39,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - REACT_APP_API_URL=https://6669-54-211-160-83.ngrok-free.app
-      - REACT_APP_WS_URL=wss://6669-54-211-160-83.ngrok-free.app
+      - REACT_APP_API_URL=https://32ce-54-211-160-83.ngrok-free.app
+      - REACT_APP_WS_URL=wss://32ce-54-211-160-83.ngrok-free.app
       - NODE_ENV=development
       - CHOKIDAR_USEPOLLING=true
     volumes:
