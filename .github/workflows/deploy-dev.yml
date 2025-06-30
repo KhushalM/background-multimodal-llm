@@ -2,9 +2,9 @@ name: Deploy to AWS Development
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [master, develop]
 
 env:
   AWS_REGION: us-east-1
@@ -78,7 +78,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     
     steps:
     - uses: actions/checkout@v4
@@ -97,7 +97,7 @@ jobs:
           
           # Pull latest code
           echo "📥 Pulling latest code..."
-          git pull origin main || {
+                      git pull origin master || {
             echo "Failed to pull code, trying to clone fresh..."
             cd /opt
             sudo rm -rf app
