@@ -16,7 +16,7 @@ export default defineConfig({
     ],
     hmr: {
       port: 3000,
-      host: '54.211.160.83'
+      host: 'e9b5-54-211-160-83.ngrok-free.app'
     },
     proxy: {
       '/api': {
