@@ -12,7 +12,7 @@ services:
     environment:
       - NODE_ENV=development
       - DATABASE_URL=sqlite:///app/dev_database.db
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-placeholder}
+      - OPENAI_KEY=${OPENAI_KEY:-placeholder}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-placeholder}
       - HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN:-placeholder}
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
