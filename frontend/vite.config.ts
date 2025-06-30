@@ -8,6 +8,12 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3000,
     strictPort: true,
+    allowedHosts: [
+      'localhost',
+      '54.211.160.83',
+      '.ngrok.io',
+      '.ngrok-free.app'
+    ],
     hmr: {
       port: 3000,
       host: '54.211.160.83'
