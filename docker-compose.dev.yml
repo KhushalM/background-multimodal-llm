@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: multimodal-backend-dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=sqlite:///app/dev_database.db
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-placeholder}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-placeholder}
+      - HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN:-placeholder}
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    volumes:
+      - ./backend:/app
+      - ./backend/uploads:/app/uploads
+      - ./backend/logs:/app/logs
+      - backend_data:/app/data
+    networks:
+      - dev-network
+    command: >
+      sh -c "
+        echo 'Starting development backend...' &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: multimodal-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_WS_URL=ws://localhost:8000
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - dev-network
+    depends_on:
+      - backend
+
+volumes:
+  backend_data:
+    driver: local
+
+networks:
+  dev-network:
+    driver: bridge 
