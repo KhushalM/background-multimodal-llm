@@ -43,6 +43,8 @@ services:
       - REACT_APP_WS_URL=wss://32ce-54-211-160-83.ngrok-free.app
       - NODE_ENV=development
       - CHOKIDAR_USEPOLLING=true
+      - VITE_REACT_APP_API_URL=https://32ce-54-211-160-83.ngrok-free.app
+      - VITE_REACT_APP_WS_URL=wss://32ce-54-211-160-83.ngrok-free.app
     volumes:
       - ./frontend:/app
       - /app/node_modules

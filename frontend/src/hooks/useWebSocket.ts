@@ -49,12 +49,21 @@ export const useWebSocket = ({ onMessage, onConnectionChange, onStatusChange, on
     isConnectingRef.current = true;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     // Use environment variable for API URL if available, otherwise fallback to current hostname
-    const apiUrl = import.meta.env.REACT_APP_WS_URL || `${protocol}//${window.location.hostname}:8000`;
+    // Try multiple methods to get the WebSocket URL
+    const viteEnvUrl = import.meta.env.VITE_REACT_APP_WS_URL;
+    const reactEnvUrl = import.meta.env.REACT_APP_WS_URL;
+    const hardcodedUrl = 'wss://32ce-54-211-160-83.ngrok-free.app';
+    const fallbackUrl = `${protocol}//${window.location.hostname}:8000`;
+    
+    const apiUrl = viteEnvUrl || reactEnvUrl || hardcodedUrl;
     const wsUrl = apiUrl.includes('/ws') ? apiUrl : `${apiUrl}/ws`;
     
     // Debug logging to see what URL is being used
     console.log(`🔍 WebSocket Debug:
-    - REACT_APP_WS_URL env var: ${import.meta.env.REACT_APP_WS_URL}
+    - VITE_REACT_APP_WS_URL env var: ${viteEnvUrl}
+    - REACT_APP_WS_URL env var: ${reactEnvUrl}
+    - Hardcoded URL: ${hardcodedUrl}
+    - Fallback URL: ${fallbackUrl}
     - Protocol: ${protocol}
     - Window hostname: ${window.location.hostname}
     - Final API URL: ${apiUrl}
