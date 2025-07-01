@@ -60,13 +60,13 @@ EOF
 4. **Start your application**:
 
 ```bash
-docker-compose -f docker-compose.dev.yml up -d --build
+docker-compose -f deployment/docker-compose.dev.yml up -d --build
 ```
 
 5. **Check if it's running**:
 
 ```bash
-docker-compose -f docker-compose.dev.yml ps
+docker-compose -f deployment/docker-compose.dev.yml ps
 curl http://localhost:8000/health
 ```
 
@@ -122,16 +122,16 @@ aws ec2 start-instances --instance-ids i-00f5ed5f6b91645c6 --region us-east-1
 
 ```bash
 # View logs
-docker-compose -f docker-compose.dev.yml logs -f
+docker-compose -f deployment/docker-compose.dev.yml logs -f
 
 # Restart services
-docker-compose -f docker-compose.dev.yml restart
+docker-compose -f deployment/docker-compose.dev.yml restart
 
 # Stop everything
-docker-compose -f docker-compose.dev.yml down
+docker-compose -f deployment/docker-compose.dev.yml down
 
 # Start everything
-docker-compose -f docker-compose.dev.yml up -d --build
+docker-compose -f deployment/docker-compose.dev.yml up -d --build
 ```
 
 ## 💰 **Cost Control**
@@ -154,7 +154,7 @@ docker-compose -f docker-compose.dev.yml up -d --build
 ```bash
 # SSH to server and check:
 docker ps                                    # Are containers running?
-docker-compose -f docker-compose.dev.yml logs  # Check logs
+docker-compose -f deployment/docker-compose.dev.yml logs  # Check logs
 curl http://localhost:8000/health            # Backend health
 ```
 
@@ -164,7 +164,7 @@ curl http://localhost:8000/health            # Backend health
 # SSH to server:
 cd /opt/app
 git pull origin master
-docker-compose -f docker-compose.dev.yml up -d --build
+docker-compose -f deployment/docker-compose.dev.yml up -d --build
 ```
 
 ## 🎯 **Next Steps**

@@ -1,219 +1,54 @@
-# Background Multimodal LLM
+# 🎤🖥️ Multimodal AI Assistant
 
-A React frontend application with screen sharing and voice assistant capabilities, built with Vite, Chakra UI, and WebSocket communication.
+A real-time multimodal AI assistant that combines voice interaction with screen context awareness. Talk to AI while it can see and understand what's on your screen.
 
-## Features
+## ✨ Features
 
-- **Screen Sharing**: Capture and share your screen using native Web APIs
-- **Voice Assistant**: Real-time audio capture and processing
-- **WebSocket Communication**: Real-time bidirectional communication with the backend
-- **Modern UI**: Built with Chakra UI v3 for a beautiful, responsive interface
-- **TypeScript**: Full type safety throughout the application
+### 🎯 Core Capabilities
 
-## Project Structure
+- **🎤 Real-time Voice Chat** - Continuous conversation with VAD (Voice Activity Detection)
+- **🖥️ Screen Context Awareness** - AI can see and analyze your screen when relevant
+- **🧠 Smart Screen Triggers** - Automatically captures screen based on conversation context
+- **⚡ Fast Response Times** - Optimized for real-time interaction
+- **🔄 WebSocket Communication** - Low-latency bidirectional communication
 
-```
-background-multimodal-llm/
-├── frontend/          # React + Vite frontend
-│   ├── src/
-│   │   ├── App.tsx    # Main application component
-│   │   ├── main.tsx   # Application entry point
-│   │   └── index.css  # Global styles
-│   └── package.json
-├── backend/           # FastAPI WebSocket server
-│   ├── main.py        # WebSocket server implementation
-│   └── requirements.txt
-└── README.md
-```
+### 🤖 AI Models & Services
 
-## Getting Started
+- **Speech-to-Text**: OpenAI Whisper API
+- **Text-to-Speech**: OpenAI TTS API
+- **Multimodal AI**: Google Gemini 2.0 Flash Exp
+- **Voice Activity Detection**: Silero VAD (via @ricky0123/vad-react)
 
-### Prerequisites
+### 🛠️ Technical Stack
 
-- Node.js (v18 or higher)
-- Python 3.11+
-- Modern web browser with WebRTC support
+- **Frontend**: React 18 + TypeScript + Vite + Chakra UI
+- **Backend**: FastAPI + Python 3.11 + WebSockets
+- **Deployment**: Docker + AWS EC2 + GitHub Actions CI/CD
+- **Development**: Dev Containers + Hot Reload
 
-### Frontend Setup
+## 🚀 Quick Start
 
-1. Navigate to the frontend directory:
+### 🐳 Development with Dev Container (Recommended)
 
-   ```bash
-   cd frontend
-   ```
+```bash
+# 1. Open in VS Code with Dev Container extension
+# 2. Container auto-setups dependencies
+# 3. Start services:
 
-2. Install dependencies:
+# Terminal 1 - Backend
+cd backend && python main.py
 
-   ```bash
-   npm install
-   ```
-
-3. Start the development server:
-
-   ```bash
-   npm run dev
-   ```
-
-   The frontend will be available at `http://localhost:3000`
-
-### Backend Setup
-
-1. Navigate to the backend directory:
-
-   ```bash
-   cd backend
-   ```
-
-2. Create a virtual environment (recommended):
-
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Start the WebSocket server:
-
-   ```bash
-   python main.py
-   ```
-
-   The backend will be available at `http://localhost:8000`
-
-## Usage
-
-### Screen Sharing
-
-1. Click the "🖥️ Share Screen" button
-2. Select the screen or application window to share
-3. The application will begin streaming screen data via WebSocket
-4. Click "🛑 Stop Sharing" to end the session
-
-### Voice Assistant
-
-1. Click the "🎙️ Voice Assistant" button
-2. Grant microphone permissions when prompted
-3. The application will begin capturing and streaming audio data
-4. Click "🔇 Stop Voice" to end the session
-
-### WebSocket Communication
-
-The application establishes a WebSocket connection with the backend server to handle:
-
-- Screen sharing events (`screen_share_start`, `screen_share_stop`)
-- Voice assistant events (`voice_assistant_start`, `voice_assistant_stop`)
-- Real-time audio data streaming (`audio_data`)
-
-## Technical Details
-
-### Frontend Technologies
-
-- **React 18**: Modern React with hooks and functional components
-- **TypeScript**: Full type safety and better developer experience
-- **Vite**: Fast build tool and development server
-- **Chakra UI v3**: Modern, accessible component library
-- **Native Web APIs**:
-  - `getUserMedia()` for microphone access
-  - `getDisplayMedia()` for screen sharing
-  - `WebSocket` for real-time communication
-  - `AudioContext` for audio processing
-
-### Backend Technologies
-
-- **FastAPI**: Modern, fast web framework for Python
-- **WebSockets**: Real-time bidirectional communication
-- **Uvicorn**: ASGI server for running the application
-- **CORS**: Cross-origin resource sharing for frontend communication
-
-### Browser Permissions
-
-The application requires the following browser permissions:
-
-- **Microphone access**: For voice assistant functionality
-- **Screen sharing**: For screen capture capabilities
-
-Make sure to grant these permissions when prompted by your browser.
-
-## API Endpoints
-
-### WebSocket Endpoint
-
-- `ws://localhost:8000/ws` - Main WebSocket endpoint for real-time communication
-
-### HTTP Endpoints
-
-- `GET /` - API status and connection information
-- `GET /health` - Health check endpoint
-
-## Development
-
-### Running in Development Mode
-
-1. Start the backend server:
-
-   ```bash
-   cd backend && python main.py
-   ```
-
-2. In a new terminal, start the frontend:
-
-   ```bash
-   cd frontend && npm run dev
-   ```
-
-3. Open your browser to `http://localhost:5173`
-
-### Building for Production
-
-1. Build the frontend:
-
-   ```bash
-   cd frontend && npm run build
-   ```
-
-2. The built files will be in the `frontend/dist` directory
-
-## Current Status - Complete System! 🎉
-
-**Voice Conversation Pipeline with Screen Context**: ✅ **COMPLETED**
-
-- 🎤 **Speech-to-Text (STT)**: Real-time audio transcription using HuggingFace Whisper
-- 🧠 **Multimodal AI Brain with Screen Context**: Intelligent responses using Gemini + Vision + LangChain memory
-- 🗣️ **Text-to-Speech (TTS)**: Natural speech synthesis using HuggingFace TTS models
-- 🖥️ **Screen Understanding**: Integrated visual context analysis using Gemini Vision
-
-**Complete Conversation Flow**:
-
-```
-User speaks + Screen capture → Distil-Whisper STT + Screen Analysis → Gemini 2.0 Flash processes with visual context → SpeechT5 TTS → User hears contextual response
+# Terminal 2 - Frontend
+cd frontend && npm run dev
 ```
 
-### What's Working Now
-
-1. ✅ **Real-time Voice Assistant**: Speak to the AI and hear responses
-2. ✅ **Screen Context Awareness**: AI can see and understand your screen content
-3. ✅ **Conversation Memory**: AI remembers context across the session
-4. ✅ **WebSocket Integration**: All services connected through real-time WebSocket
-5. ✅ **Multi-user Support**: Separate sessions for concurrent users
-6. ✅ **Error Handling**: Robust fallbacks and retry logic
-
-### Quick Start
+### 💻 Manual Local Development
 
 ```bash
 # Backend setup
 cd backend
-pip install -r requirements.txt
-
-# Add API keys to backend/.env
-HUGGINGFACE_API_TOKEN=your_hf_token
-GEMINI_API_KEY=your_gemini_key
-
-# Start backend
+uv pip install -r requirements.txt
+cp env.example .env  # Configure your API keys
 python main.py
 
 # Frontend setup (new terminal)
@@ -222,51 +57,226 @@ npm install
 npm run dev
 ```
 
-### Testing the Complete Pipeline
+### 🌐 Access URLs
+
+- **Frontend**: http://localhost:3000
+- **Backend**: http://localhost:8000
+- **Health Check**: http://localhost:8000/health
+
+## ⚙️ Configuration
+
+### 🔑 Required API Keys
+
+Copy `backend/env.example` to `backend/.env`:
 
 ```bash
-# Test individual services
-python backend/test_stt.py      # Tests Distil-Whisper v3.5
-python backend/test_multimodal.py  # Tests Gemini 2.0 Flash with screen context
-python backend/test_tts.py      # Tests SpeechT5
+# Required for full functionality
+OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 
-# Test complete integration
-python backend/test_pipeline.py
+# Optional
+HUGGINGFACE_API_TOKEN=your_huggingface_token_here
+SECRET_KEY=your_secret_key_here
 ```
 
-## System Architecture
+### 🎤 Browser Permissions
 
-The multimodal AI assistant now features a fully integrated architecture:
+**Important**: For voice features to work:
+
+- Use **HTTPS** in production (required for microphone access)
+- For local development: Chrome/Firefox will ask for microphone permission
+- Allow microphone access when prompted
+
+## 🏗️ Project Structure
 
 ```
-Frontend (React + WebRTC)
-    ↓
-WebSocket Connection
-    ↓
-Backend Services:
-├── STT Service (Distil-Whisper v3.5)
-├── Multimodal Service (Gemini 2.0 Flash + Vision + Memory)
-│   ├── Text Processing
-│   ├── Screen Analysis
-│   ├── Context Integration
-│   └── Response Generation
-└── TTS Service (SpeechT5)
+├── backend/              # FastAPI backend
+│   ├── main.py          # Main application entry point
+│   ├── models/          # AI model integrations
+│   ├── services/        # Core services & managers
+│   ├── env.example      # Environment configuration template
+│   └── requirements.txt # Python dependencies
+├── frontend/            # React frontend
+│   ├── src/
+│   │   ├── components/  # React components
+│   │   ├── hooks/       # Custom React hooks
+│   │   └── services/    # API service layers
+│   └── package.json     # Node dependencies
+├── deployment/          # All deployment files
+│   ├── docker-compose.dev.yml     # Development deployment
+│   ├── scripts/setup-aws-dev.sh   # AWS infrastructure setup
+│   └── infrastructure/            # CloudFormation templates
+├── docs/               # Documentation
+└── .github/workflows/  # CI/CD pipelines
 ```
 
-**Key Integration Benefits:**
+## 🔧 Development
 
-- Single service handles both text and visual understanding
-- Unified context processing for better responses
-- Simplified architecture and maintenance
-- Reduced latency through integrated processing
+### 🛠️ Available Commands
 
-## Browser Compatibility
+```bash
+# Backend
+cd backend
+python main.py              # Start development server
+uv pip install -r requirements.txt  # Install dependencies
 
-- Chrome/Chromium 88+
-- Firefox 88+
-- Safari 14+
-- Edge 88+
+# Frontend
+cd frontend
+npm run dev                  # Start development server
+npm run build               # Build for production
+npm run preview             # Preview production build
 
-## License
+# Deployment
+docker-compose -f deployment/docker-compose.dev.yml up -d  # Start with Docker
+```
 
-MIT License - see LICENSE file for details
+### 🔍 Debugging
+
+```bash
+# View logs
+docker-compose -f deployment/docker-compose.dev.yml logs -f
+
+# Check specific service
+docker-compose -f deployment/docker-compose.dev.yml logs backend
+docker-compose -f deployment/docker-compose.dev.yml logs frontend
+
+# Restart services
+docker-compose -f deployment/docker-compose.dev.yml restart
+```
+
+## 🚀 Deployment
+
+### ☁️ AWS Production Deployment
+
+```bash
+# 1. Setup AWS infrastructure
+chmod +x deployment/scripts/setup-aws-dev.sh
+./deployment/scripts/setup-aws-dev.sh
+
+# 2. Configure GitHub Secrets (for CI/CD)
+# Go to: https://github.com/your-repo/settings/secrets/actions
+# Add these secrets:
+# - DEV_EC2_INSTANCE_IP: Your EC2 public IP
+# - DEV_EC2_SSH_PRIVATE_KEY: Your EC2 private key content
+# - OPENAI_API_KEY: Your OpenAI API key
+# - GEMINI_API_KEY: Your Gemini API key
+
+# 3. Deploy via GitHub Actions
+git push origin main  # Triggers automatic deployment
+```
+
+### 🔄 Continuous Deployment
+
+- **Push to `main`** → Automatic production deployment
+- **Pull requests** → Automatic testing
+- **Health checks** → Automatic validation
+- **Rollback support** → Safe deployments
+
+### 💰 AWS Costs
+
+- **Development**: ~$5-15/month (free tier eligible)
+- **Production**: ~$25-50/month (depends on usage)
+
+## 🎯 Usage Guide
+
+### 🎤 Voice Interaction
+
+1. **Click "Start Voice Assistant"**
+2. **Grant microphone permission** when prompted
+3. **Start talking** - VAD automatically detects speech
+4. **AI responds** with voice and text
+
+### 🖥️ Screen Context
+
+- **Smart Triggers**: AI automatically captures screen when you say things like:
+  - "Can you see my screen?"
+  - "What's this error?"
+  - "Help me with this"
+- **Manual Capture**: Click "Share Screen" for continuous sharing
+- **Privacy**: Screen capture only when explicitly needed
+
+### 💡 Pro Tips
+
+- **Clear Speech**: Speak clearly for better transcription
+- **Context Clues**: Use phrases like "look at this" to trigger screen capture
+- **Error Debugging**: Say "what's wrong here?" while viewing errors
+- **Natural Conversation**: Talk naturally - the AI understands context
+
+## 🔧 Advanced Configuration
+
+### 🎛️ VAD Sensitivity
+
+Adjust in `frontend/src/hooks/useVoiceAgent.ts`:
+
+```typescript
+const vadOptions = {
+  positiveSpeechThreshold: 0.8, // Higher = less sensitive
+  negativeSpeechThreshold: 0.2, // Lower = less sensitive
+  minSpeechFrames: 3, // Minimum frames for speech detection
+};
+```
+
+### 🖥️ Screen Capture Settings
+
+Configure in `backend/main.py`:
+
+```python
+SCREEN_TRIGGER_CONFIDENCE = 0.7  # Confidence threshold for auto-capture
+SCREEN_CAPTURE_QUALITY = 0.8     # Image quality (0.1-1.0)
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**🎤 Microphone not working**
+
+- Ensure HTTPS (required in production)
+- Check browser permissions
+- Try refreshing the page
+
+**🖥️ Screen sharing not working**
+
+- Use Chrome/Firefox (Safari has limitations)
+- Grant screen sharing permission
+- Check for browser extensions blocking
+
+**⚡ Slow responses**
+
+- Check your internet connection
+- Verify API keys are configured
+- Monitor backend logs for errors
+
+**🔌 Connection issues**
+
+- Check WebSocket connection in browser dev tools
+- Verify backend is running on port 8000
+- Check firewall settings
+
+### 📊 Health Monitoring
+
+- **Health Check**: http://localhost:8000/health
+- **Performance**: http://localhost:8000/performance
+- **Logs**: `docker-compose logs -f`
+
+## 🤝 Contributing
+
+1. **Fork the repository**
+2. **Create feature branch**: `git checkout -b feature/amazing-feature`
+3. **Commit changes**: `git commit -m 'Add amazing feature'`
+4. **Push to branch**: `git push origin feature/amazing-feature`
+5. **Open Pull Request**
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **🐛 Bug Reports**: [GitHub Issues](https://github.com/your-repo/issues)
+- **💡 Feature Requests**: [GitHub Discussions](https://github.com/your-repo/discussions)
+- **📖 Documentation**: [./docs/](./docs/)
+
+---
+
+**Built with ❤️ for seamless human-AI interaction**

@@ -131,11 +131,11 @@ update_template() {
     log "Updating development CloudFormation template..."
     
     # Create backup
-    cp infrastructure/cloudformation-dev.yaml infrastructure/cloudformation-dev.yaml.bak
+    cp deployment/infrastructure/cloudformation-dev.yaml deployment/infrastructure/cloudformation-dev.yaml.bak
     
     # Update AMI ID in template
-    sed -i.tmp "s/ami-0abcdef1234567890/${AMI_ID}/" infrastructure/cloudformation-dev.yaml
-    rm infrastructure/cloudformation-dev.yaml.tmp 2>/dev/null || true
+    sed -i.tmp "s/ami-0abcdef1234567890/${AMI_ID}/" deployment/infrastructure/cloudformation-dev.yaml
+    rm deployment/infrastructure/cloudformation-dev.yaml.tmp 2>/dev/null || true
     
     success "Template updated"
 }
@@ -150,7 +150,7 @@ deploy_stack() {
         if [[ $update_stack == "y" || $update_stack == "Y" ]]; then
             aws cloudformation update-stack \
                 --stack-name "$STACK_NAME" \
-                --template-body file://infrastructure/cloudformation-dev.yaml \
+                --template-body file://deployment/infrastructure/cloudformation-dev.yaml \
                 --parameters ParameterKey=KeyPairName,ParameterValue="$KEY_NAME" \
                 --capabilities CAPABILITY_IAM \
                 --region "$REGION"
@@ -164,7 +164,7 @@ deploy_stack() {
     else
         aws cloudformation create-stack \
             --stack-name "$STACK_NAME" \
-            --template-body file://infrastructure/cloudformation-dev.yaml \
+            --template-body file://deployment/infrastructure/cloudformation-dev.yaml \
             --parameters ParameterKey=KeyPairName,ParameterValue="$KEY_NAME" \
             --capabilities CAPABILITY_IAM \
             --region "$REGION"
@@ -259,7 +259,7 @@ create_summary() {
 1. **Configure GitHub Secrets**: Add secrets from \`github-dev-secrets.txt\`
 2. **SSH to EC2**: \`${SSH_COMMAND}\`
 3. **Clone your repository**: \`git clone ${GITHUB_REPO} /opt/app\`
-4. **Start development**: \`cd /opt/app && docker-compose -f docker-compose.dev.yml up -d\`
+4. **Start development**: \`cd /opt/app && docker-compose -f deployment/docker-compose.dev.yml up -d\`
 
 ## 🔗 Access URLs (after deployment)
 
@@ -282,16 +282,16 @@ create_summary() {
 ${SSH_COMMAND}
 
 # View logs
-docker-compose -f docker-compose.dev.yml logs -f
+docker-compose -f deployment/docker-compose.dev.yml logs -f
 
 # Restart services
-docker-compose -f docker-compose.dev.yml restart
+docker-compose -f deployment/docker-compose.dev.yml restart
 
 # Stop everything
-docker-compose -f docker-compose.dev.yml down
+docker-compose -f deployment/docker-compose.dev.yml down
 
 # Start everything
-docker-compose -f docker-compose.dev.yml up -d
+docker-compose -f deployment/docker-compose.dev.yml up -d
 \`\`\`
 
 ## 🔄 Automatic Deployment

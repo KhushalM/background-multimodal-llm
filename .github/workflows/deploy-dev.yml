@@ -122,11 +122,11 @@ jobs:
           
           # Stop existing containers
           echo "🛑 Stopping existing containers..."
-          docker-compose -f docker-compose.dev.yml down || echo "No containers to stop"
+          docker-compose -f deployment/docker-compose.dev.yml down || echo "No containers to stop"
           
           # Build and start new containers
           echo "🔨 Building and starting containers..."
-          docker-compose -f docker-compose.dev.yml up -d --build
+          docker-compose -f deployment/docker-compose.dev.yml up -d --build
           
           # Wait for services to be ready
           echo "⏳ Waiting for services to start..."
@@ -138,7 +138,7 @@ jobs:
             echo "✅ Backend is healthy!"
           else
             echo "❌ Backend health check failed, checking logs..."
-            docker-compose -f docker-compose.dev.yml logs backend
+            docker-compose -f deployment/docker-compose.dev.yml logs backend
             exit 1
           fi
           
@@ -147,7 +147,7 @@ jobs:
             echo "✅ Frontend is running!"
           else
             echo "❌ Frontend check failed, checking logs..."
-            docker-compose -f docker-compose.dev.yml logs frontend
+            docker-compose -f deployment/docker-compose.dev.yml logs frontend
             echo "⚠️  Frontend might still be starting up..."
           fi
           
@@ -157,7 +157,7 @@ jobs:
           
           echo "🎉 Development deployment completed!"
           echo "📊 Container status:"
-          docker-compose -f docker-compose.dev.yml ps
+          docker-compose -f deployment/docker-compose.dev.yml ps
           
           echo ""
           echo "🔗 Access URLs:"

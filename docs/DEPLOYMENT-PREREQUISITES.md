@@ -216,7 +216,7 @@ pwd
 ls -la | grep -E "(docker-compose.dev.yml|scripts|infrastructure)"
 
 # 3. Check script permissions
-ls -la scripts/setup-aws-dev.sh
+ls -la deployment/scripts/setup-aws-dev.sh
 
 # 4. Check your git repository
 git remote get-url origin
@@ -292,7 +292,7 @@ Before proceeding, make sure you can run:
 aws sts get-caller-identity
 jq --version
 git remote get-url origin
-ls scripts/setup-aws-dev.sh
+ls deployment/scripts/setup-aws-dev.sh
 ```
 
 ## 🚀 **Ready to Deploy?**
@@ -301,10 +301,10 @@ Once all prerequisites are complete:
 
 ```bash
 # Make script executable
-chmod +x scripts/setup-aws-dev.sh
+chmod +x deployment/scripts/setup-aws-dev.sh
 
 # Run the setup (it will guide you through everything)
-./scripts/setup-aws-dev.sh
+./deployment/scripts/setup-aws-dev.sh
 ```
 
 The script will ask you for:

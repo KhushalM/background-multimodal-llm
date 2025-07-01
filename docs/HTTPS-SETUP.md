@@ -27,7 +27,7 @@ Your multimodal AI assistant needs HTTPS for microphone access. Here are two sim
 
    ```bash
    cd /opt/app/background-multimodal-llm
-   docker-compose -f docker-compose.dev.yml up -d
+   docker-compose -f deployment/docker-compose.dev.yml up -d
    ```
 
 4. **Start ngrok tunnel:**
@@ -53,7 +53,7 @@ Your multimodal AI assistant needs HTTPS for microphone access. Here are two sim
 1. **Run the setup script:**
 
    ```bash
-   ./scripts/add-nginx-ssl.sh
+   ./deployment/scripts/add-nginx-ssl.sh
    ```
 
 2. **Update environment variables:**
@@ -67,8 +67,8 @@ Your multimodal AI assistant needs HTTPS for microphone access. Here are two sim
 3. **Restart with SSL:**
 
    ```bash
-   docker-compose -f docker-compose.dev.yml down
-   docker-compose -f docker-compose.dev.yml up -d
+   docker-compose -f deployment/docker-compose.dev.yml down
+   docker-compose -f deployment/docker-compose.dev.yml up -d
    ```
 
 4. **Access with browser warning:**
