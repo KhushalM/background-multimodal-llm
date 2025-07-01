@@ -14,10 +14,7 @@ export default defineConfig({
       '.ngrok.io',
       '.ngrok-free.app'
     ],
-    hmr: {
-      port: 3000,
-      host: '4c80-54-211-160-83.ngrok-free.app'
-    },
+    hmr: false, // Disable HMR for ngrok stability
     proxy: {
       '/api': {
         target: 'https://a4c8-54-211-160-83.ngrok-free.app',
