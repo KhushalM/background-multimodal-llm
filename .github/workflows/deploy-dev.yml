@@ -37,7 +37,7 @@ jobs:
       working-directory: ./backend
       run: |
         pip install uv
-        uv pip install --system -e .
+        uv pip install --system -r requirements.txt
     
     - name: Run frontend tests (if available)
       working-directory: ./frontend
