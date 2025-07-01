@@ -3,7 +3,7 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./backend
+      context: ../backend
       dockerfile: Dockerfile
     container_name: multimodal-backend-dev
     restart: unless-stopped
@@ -18,9 +18,9 @@ services:
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
       - CORS_ORIGINS=http://54.211.160.83:3000,http://54.211.160.83:8000,https://back-agent.com,https://api.back-agent.com
     volumes:
-      - ./backend:/app
-      - ./backend/uploads:/app/uploads
-      - ./backend/logs:/app/logs
+      - ../backend:/app
+      - ../backend/uploads:/app/uploads
+      - ../backend/logs:/app/logs
       - backend_data:/app/data
     networks:
       - dev-network
@@ -32,7 +32,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ../frontend
       dockerfile: Dockerfile.dev
     container_name: multimodal-frontend-dev
     restart: unless-stopped
@@ -46,7 +46,7 @@ services:
       - VITE_REACT_APP_API_URL=https://api.back-agent.com
       - VITE_REACT_APP_WS_URL=wss://api.back-agent.com
     volumes:
-      - ./frontend:/app
+      - ../frontend:/app
       - /app/node_modules
     networks:
       - dev-network

@@ -8,9 +8,31 @@ echo ""
 # Check if cloudflared is installed
 if ! command -v cloudflared &> /dev/null; then
     echo "📦 Installing cloudflared..."
-    wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-    sudo dpkg -i cloudflared-linux-amd64.deb
-    rm cloudflared-linux-amd64.deb
+    
+    # Check for package manager to determine OS
+    if command -v dpkg &> /dev/null; then
+        echo "   Detected Debian/Ubuntu system. Using dpkg."
+        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+        sudo dpkg -i cloudflared-linux-amd64.deb
+        rm cloudflared-linux-amd64.deb
+    elif command -v rpm &> /dev/null; then
+        echo "   Detected RPM-based system (Amazon Linux/CentOS/RHEL). Using rpm."
+        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-x86_64.rpm
+        sudo rpm -ivh cloudflared-linux-x86_64.rpm
+        rm cloudflared-linux-x86_64.rpm
+    else
+        echo "   Falling back to direct binary download."
+        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /tmp/cloudflared
+        chmod +x /tmp/cloudflared
+        sudo mv /tmp/cloudflared /usr/local/bin/cloudflared
+    fi
+    
+    # Verify installation
+    if ! command -v cloudflared &> /dev/null; then
+        echo "❌ cloudflared installation failed. Please install it manually from:"
+        echo "   https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/"
+        exit 1
+    fi
     echo "✅ cloudflared installed successfully!"
 else
     echo "✅ cloudflared is already installed."
@@ -94,6 +116,10 @@ echo ""
 echo "🔄 Step 5: Updating application URLs"
 echo "--------------------------------"
 echo "Updating all application URLs to use back-agent.com..."
+
+# Make sure the update scripts are executable
+chmod +x ./deployment/scripts/quick-update.sh
+chmod +x ./deployment/scripts/update-urls.sh
 
 # Run the quick-update script with the new domain
 ./deployment/scripts/quick-update.sh https://back-agent.com
