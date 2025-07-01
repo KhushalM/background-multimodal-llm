@@ -12,17 +12,20 @@ export default defineConfig({
       'localhost',
       '54.211.160.83',
       '.ngrok.io',
-      '.ngrok-free.app'
+      '.ngrok-free.app',
+      'back-agent.com',
+      '*.back-agent.com',
+      '*.trycloudflare.com'
     ],
-    hmr: false, // Disable HMR for ngrok stability
+    hmr: false, // Disable HMR for stability
     proxy: {
       '/api': {
-        target: 'https://a4c8-54-211-160-83.ngrok-free.app',
+        target: 'https://api.back-agent.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },
       '/ws': {
-        target: 'wss://a4c8-54-211-160-83.ngrok-free.app',
+        target: 'wss://api.back-agent.com',
         ws: true,
         changeOrigin: true
       }

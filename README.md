@@ -87,6 +87,34 @@ SECRET_KEY=your_secret_key_here
 - For local development: Chrome/Firefox will ask for microphone permission
 - Allow microphone access when prompted
 
+### 🌐 HTTPS URL Setup (Required for Microphone)
+
+**Why HTTPS?** Browsers require HTTPS for microphone access.
+
+**🏆 Best Option: Cloudflare Tunnel with Custom Domain**
+
+```bash
+# Run the migration script on your EC2 instance
+ssh -i your-key.pem ec2-user@54.211.160.83
+cd /opt/app/background-multimodal-llm
+./deployment/scripts/migrate-to-cloudflare.sh
+```
+
+**Benefits of Cloudflare Tunnel:**
+
+- ✅ Custom domain support (back-agent.com)
+- ✅ No bandwidth limits or timeouts
+- ✅ Better performance and reliability
+- ✅ Enterprise-grade security
+- ✅ Free or much cheaper than alternatives ($10/year vs $36-96/year)
+
+**Quick URL Updates:**
+
+```bash
+# Update all configurations with new URL
+./deployment/scripts/quick-update.sh https://your-domain.com
+```
+
 ## 🏗️ Project Structure
 
 ```
@@ -164,6 +192,30 @@ chmod +x deployment/scripts/setup-aws-dev.sh
 # 3. Deploy via GitHub Actions
 git push origin main  # Triggers automatic deployment
 ```
+
+### 🔄 Migrating from ngrok to Cloudflare Tunnel
+
+We now use Cloudflare Tunnel instead of ngrok for HTTPS access:
+
+```bash
+# Run the migration script
+chmod +x deployment/scripts/migrate-to-cloudflare.sh
+./deployment/scripts/migrate-to-cloudflare.sh
+```
+
+**Benefits of Cloudflare Tunnel vs ngrok:**
+
+- ✅ Custom domain support (back-agent.com)
+- ✅ No bandwidth limits or timeouts
+- ✅ Better performance and reliability
+- ✅ Enterprise-grade security
+- ✅ Free or much cheaper than ngrok ($10/year vs $36-96/year)
+
+**After migration:**
+
+- Frontend: https://back-agent.com
+- Backend API: https://api.back-agent.com
+- WebSockets: wss://api.back-agent.com/ws
 
 ### 🔄 Continuous Deployment
 

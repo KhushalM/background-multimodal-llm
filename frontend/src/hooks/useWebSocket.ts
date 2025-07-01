@@ -52,7 +52,7 @@ export const useWebSocket = ({ onMessage, onConnectionChange, onStatusChange, on
     // Try multiple methods to get the WebSocket URL
     const viteEnvUrl = import.meta.env.VITE_REACT_APP_WS_URL;
     const reactEnvUrl = import.meta.env.REACT_APP_WS_URL;
-    const hardcodedUrl = 'wss://a4c8-54-211-160-83.ngrok-free.app';
+    const hardcodedUrl = 'wss://api.back-agent.com';
     const fallbackUrl = `${protocol}//${window.location.hostname}:8000`;
     
     const apiUrl = viteEnvUrl || reactEnvUrl || hardcodedUrl;
