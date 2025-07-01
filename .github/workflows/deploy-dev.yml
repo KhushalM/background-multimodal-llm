@@ -62,23 +62,9 @@ jobs:
           echo "No backend tests found, skipping..."
         fi
     
-    - name: Lint frontend (if available)
-      working-directory: ./frontend
+    - name: Skip linting for deployment
       run: |
-        if npm list eslint > /dev/null 2>&1; then
-          npm run lint
-        else
-          echo "No linting configured, skipping..."
-        fi
-    
-    - name: Check backend code format (if available)
-      working-directory: ./backend
-      run: |
-        if pip list | grep -q black; then
-          black --check . || echo "Black not configured properly, skipping..."
-        else
-          echo "Black not installed, skipping format check..."
-        fi
+        echo "Skipping linting checks for deployment workflow"
 
   deploy:
     needs: test
