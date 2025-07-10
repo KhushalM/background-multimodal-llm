@@ -49,9 +49,9 @@ class PerplexityClient:
             return False
 
     def _send_request(self, method: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Send a JSON-RPC request to the MCP server"""
-        if not self.is_connected or not self.proc:
-            logger.error("MCP server not connected")
+        """Send a request to the MCP server"""
+        if not self.is_connected or not self.proc or not self.proc.stdin or not self.proc.stdout:
+            logger.error("MCP server not connected or stdin/stdout not available")
             return None
 
         try:

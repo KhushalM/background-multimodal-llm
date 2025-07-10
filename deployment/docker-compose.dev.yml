@@ -22,6 +22,7 @@ services:
       - ../backend/uploads:/app/uploads
       - ../backend/logs:/app/logs
       - backend_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - dev-network
     command: >
@@ -29,6 +30,17 @@ services:
         echo 'Starting development backend...' &&
         uvicorn main:app --host 0.0.0.0 --port 8000 --reload
       "
+
+  mcp-perplexity:
+    image: mcp/perplexity-ask:latest
+    container_name: mcp-perplexity-dev
+    restart: unless-stopped
+    environment:
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-placeholder}
+    networks:
+      - dev-network
+    stdin_open: true
+    tty: true
 
   frontend:
     build:

@@ -131,14 +131,15 @@ jobs:
             echo "📦 MCP Docker image not found, building..."
             
             # Check if source exists, clone if needed
-            if [ ! -d "backend/MCP/mcp_servers/modelcontextprotocol/perplexity-ask" ]; then
+            if [ ! -d "backend/MCP/mcp_server/modelcontextprotocol/perplexity-ask" ]; then
               echo "📥 Cloning Perplexity MCP server..."
-              cd backend/MCP/mcp_servers/
+              mkdir -p backend/MCP/mcp_server/
+              cd backend/MCP/mcp_server/
               git clone https://github.com/ppl-ai/modelcontextprotocol.git
             fi
             
             # Build Docker image
-            cd backend/MCP/mcp_servers/modelcontextprotocol/perplexity-ask
+            cd backend/MCP/mcp_server/modelcontextprotocol/perplexity-ask
             if [ -f "package.json" ]; then
               echo "📦 Installing npm dependencies..."
               npm install || echo "⚠️  npm install failed, MCP features may not work"
