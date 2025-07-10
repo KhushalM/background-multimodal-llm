@@ -101,6 +101,7 @@ class PerplexityClient:
 
         except Exception as e:
             logger.error(f"Error sending request: {e}")
+            logger.error(f"Response: {json_rpc_request}")
             return None
 
     async def ask(self, question: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> Optional[str]:

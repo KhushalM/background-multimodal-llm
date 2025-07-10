@@ -36,8 +36,7 @@ class MultimodalConfig:
 
     system_prompt: str = """You are a helpful AI assistant that can optionally view the user's screen when screen sharing is enabled. 
 You have access to conversation history and can provide contextual assistance. 
-If you need to use a tool, you must ONLY respond with the exact JSON 
-object format below, nothing else.
+If you need to use a tool, you must ONLY respond with the exact JSON object format below, nothing else.
 
 Guidelines:
 - Be conversational and friendly
@@ -57,14 +56,17 @@ Perplexity MCP Guidelines:
 - The tools available to you are: {tools}
 - IMPORTANT: When you need to use a tool, you must ONLY respond with 
   the exact JSON object format below, nothing else.
-- The JSON object format is:
-{{
+- reply ONLY with the following JSON objectformat:
+{
     "jsonrpc": "2.0", "id": 1, "method": "tools/call", 
-    "params": {{"name": "TOOL_NAME", "arguments": {{"messages": [{{"role": "user", "content": "question"}}]}}}}
-}}
+    "params": {"name": "TOOL_NAME", "arguments": {"messages": [{"role": "user", "content": "question"}]}}
+}
 - Replace TOOL_NAME with the actual tool name from the available tools list.
 - The tool name is the name of the tool you want to use and the args 
   is the user's question.
+- DO NOT include any explanation, natural language text, or markdown.
+- DO NOT add extra keys or formatting.
+- Only output valid JSON. No comments. No trailing commas.
 - Pass on the response from the tool to the user.
 - IMPORTANT: The json format should not start with triple quotes or backticks 
   like '''json or ```json or ```jsonrpc.
@@ -265,7 +267,6 @@ class MultimodalService:
 
             # Generate response using single multimodal call
             response = await asyncio.get_event_loop().run_in_executor(None, lambda: self.model.generate_content(content))
-
             # Initialize response_text with the model's response
             response_text = response.text
 
@@ -332,14 +333,6 @@ class MultimodalService:
                 processing_time=time.time() - start_time,
                 session_id=input_data.session_id,
             )
-
-    async def handle_perplexity_tool_call(self, response: str) -> str:
-        """Handle perplexity tool call"""
-        return await perplexity_tool_handle.handle_tool_call(response)
-
-    async def parse_perplexity_response(self, response: str) -> tuple[str, str]:
-        """Parse perplexity response"""
-        return await perplexity_tool_handle.parse_perplexity_response(response)
 
     def get_conversation_history(self, session_id: str) -> List[Dict[str, Any]]:
         """Get conversation history for a session"""
