@@ -1,4 +1,4 @@
-from backend.MCP.mcp_client.client import PerplexityClient
+from .client import PerplexityClient
 import logging
 
 logger = logging.getLogger(__name__)
