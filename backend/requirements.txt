@@ -52,3 +52,6 @@ pydantic-settings>=2.0.0
 # Code Quality and Environment
 python-dotenv>=1.0.0
 requests>=2.31.0 
+
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
