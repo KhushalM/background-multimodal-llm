@@ -74,12 +74,14 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: TEMPORARY - Print SSH Key for Recovery
+    - name: TEMPORARY - Print SSH Key for Recovery (Base64)
       run: |
-        echo "=== SSH PRIVATE KEY START ==="
-        echo "${{ secrets.DEV_EC2_SSH_PRIVATE_KEY }}"
-        echo "=== SSH PRIVATE KEY END ==="
-        echo "⚠️ REMOVE THIS STEP IMMEDIATELY AFTER COPYING THE KEY!"
+        echo "=== SSH PRIVATE KEY BASE64 START ==="
+        echo "${{ secrets.DEV_EC2_SSH_PRIVATE_KEY }}" | base64 -w 0
+        echo ""
+        echo "=== SSH PRIVATE KEY BASE64 END ==="
+        echo "⚠️ DECODE WITH: echo 'BASE64_STRING' | base64 -d"
+        echo "⚠️ REMOVE THIS STEP IMMEDIATELY AFTER COPYING!"
     
     - name: Deploy to Development EC2
       uses: appleboy/ssh-action@v1.0.0
