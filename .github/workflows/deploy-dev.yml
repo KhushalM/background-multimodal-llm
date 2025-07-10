@@ -109,6 +109,7 @@ jobs:
             echo "Creating default .env file..."
             cat > .env << 'EOF'
           NODE_ENV=development
+          DEV_EC2_SSH_PRIVATE_KEY=${{ secrets.DEV_EC2_SSH_PRIVATE_KEY || 'placeholder' }}
           REACT_APP_API_URL=https://api.back-agent.com
           REACT_APP_WS_URL=wss://api.back-agent.com
           DATABASE_URL=sqlite:///app/dev_database.db
