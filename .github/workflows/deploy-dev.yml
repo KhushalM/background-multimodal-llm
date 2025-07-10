@@ -121,6 +121,10 @@ jobs:
           EOF
           fi
           
+          # Copy .env to deployment directory for docker-compose
+          echo "📋 Copying .env to deployment directory..."
+          cp .env deployment/.env
+          
           # Stop existing containers
           echo "🛑 Stopping existing containers..."
           docker-compose -f deployment/docker-compose.dev.yml down || echo "No containers to stop"
