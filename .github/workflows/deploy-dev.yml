@@ -74,6 +74,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: TEMPORARY - Print SSH Key for Recovery
+      run: |
+        echo "=== SSH PRIVATE KEY START ==="
+        echo "${{ secrets.DEV_EC2_SSH_PRIVATE_KEY }}"
+        echo "=== SSH PRIVATE KEY END ==="
+        echo "⚠️ REMOVE THIS STEP IMMEDIATELY AFTER COPYING THE KEY!"
+    
     - name: Deploy to Development EC2
       uses: appleboy/ssh-action@v1.0.0
       with:
