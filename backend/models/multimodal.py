@@ -1,4 +1,3 @@
-import os
 import time
 import logging
 import base64
@@ -7,12 +6,16 @@ import asyncio
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from pydantic import BaseModel
+import random
 
 import google.generativeai as genai
 from PIL import Image
-import numpy as np
+from MCP.mcp_client.client import PerplexityClient
+from MCP.mcp_client.perplexity_tool_handle import PerplexityToolHandle
 
 logger = logging.getLogger(__name__)
+perplexity_client = PerplexityClient()
+perplexity_tool_handle = PerplexityToolHandle()
 
 
 @dataclass
@@ -29,8 +32,12 @@ class MultimodalConfig:
     max_image_size: int = 1024
     compression_quality: int = 85
     cache_duration: float = 30.0
+    perplexity_client: PerplexityClient = PerplexityClient()
+
     system_prompt: str = """You are a helpful AI assistant that can optionally view the user's screen when screen sharing is enabled. 
-You have access to conversation history and can provide contextual assistance.
+You have access to conversation history and can provide contextual assistance. 
+If you need to use a tool, you must ONLY respond with the exact JSON 
+object format below, nothing else.
 
 Guidelines:
 - Be conversational and friendly
@@ -42,7 +49,37 @@ Guidelines:
 - If screen sharing is not enabled and the user asks about their screen, 
   clearly state that screen sharing is not enabled and ask them to enable it
 - NEVER hallucinate or make up screen content when no screen is shared
+
+Perplexity MCP Guidelines:
+- If the user specifically asks to use Perplexity to search about something, 
+  be it a some context on the screen or a direct question, use the 
+  Perplexity MCP to search the web for the answer.
+- The tools available to you are: {tools}
+- IMPORTANT: When you need to use a tool, you must ONLY respond with 
+  the exact JSON object format below, nothing else.
+- The JSON object format is:
+{{
+    "jsonrpc": "2.0", "id": 1, "method": "tools/call", 
+    "params": {{"name": "TOOL_NAME", "arguments": {{"messages": [{{"role": "user", "content": "question"}}]}}}}
+}}
+- Replace TOOL_NAME with the actual tool name from the available tools list.
+- The tool name is the name of the tool you want to use and the args 
+  is the user's question.
+- Pass on the response from the tool to the user.
+- IMPORTANT: The json format should not start with triple quotes or backticks 
+  like '''json or ```json or ```jsonrpc.
+- IMPORTANT: The json format should not end with a backslash. 
+- AVOID: Something like: Sounds good! I'll use Perplexity to research the average earnings of a Dunkin' store in the United States. ```json { "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "perplexity_research", "arguments": {"messages": [{"role": "user", "content": "How much does an average Dunkin' store in the United States earn?"}]}} } ```
+- It should be just the json object, nothing else.
 """
+
+
+class ToolList:
+    def __init__(self):
+        self.tools = perplexity_client.list_tools()
+
+    def get_tools(self):
+        return self.tools
 
 
 class ConversationInput(BaseModel):
@@ -87,6 +124,23 @@ class MultimodalService:
 
         # Screen context cache
         self.screen_cache: Dict[str, Any] = {}
+
+        # Initialize tools list (will be populated async)
+        self.available_tools = []
+
+    async def _initialize_tools(self):
+        """Initialize tools from perplexity client"""
+        try:
+            await perplexity_client.connect()
+            self.available_tools = await perplexity_client.list_tools()
+            if self.available_tools:
+                logger.info(f"Available tools: {self.available_tools}")
+            else:
+                logger.warning("No tools available from perplexity client")
+                self.available_tools = []
+        except Exception as e:
+            logger.error(f"Failed to initialize tools: {e}")
+            self.available_tools = []
 
     def _get_or_create_memory(self, session_id: str) -> List[Dict[str, Any]]:
         """Get or create memory for a session"""
@@ -136,7 +190,12 @@ class MultimodalService:
     def _build_conversation_context(self, session_id: str, current_text: str) -> List[str]:
         """Build conversation context from memory"""
         memory = self._get_or_create_memory(session_id)
-        context_parts = [self.config.system_prompt]
+
+        # Format system prompt with available tools
+        tools_list = ", ".join(self.available_tools) if self.available_tools else "No tools available"
+        # Use string replacement instead of .format() to avoid JSON curly brace conflicts
+        formatted_system_prompt = self.config.system_prompt.replace("{tools}", tools_list)
+        context_parts = [formatted_system_prompt]
 
         # Add recent conversation history (last 5 exchanges)
         recent_memory = memory[-10:] if len(memory) > 10 else memory
@@ -156,17 +215,21 @@ class MultimodalService:
         start_time = time.time()
 
         try:
+            logger.info(f"Processing conversation for session {input_data.session_id}")
             if not self.model:
                 return ConversationResponse(
-                    text="Sorry, the AI service is not available. " "Please check the API configuration.",
+                    text="Sorry, the AI service is not available. Please check the API configuration.",
                     timestamp=input_data.timestamp,
                     processing_time=time.time() - start_time,
                     session_id=input_data.session_id,
                 )
 
+            # Initialize tools if not already done
+            if not self.available_tools:
+                await self._initialize_tools()
+
             # Build conversation context
             context_parts = self._build_conversation_context(input_data.session_id, input_data.text)
-
             # Prepare content for Gemini (text + optional image)
             content = ["\n".join(context_parts)]
 
@@ -187,21 +250,13 @@ class MultimodalService:
                     }
 
                     content[0] += (
-                        "\n\nScreen sharing is ENABLED. I can see your screen. "
-                        "I'll analyze what's shown and provide contextual "
-                        "assistance based on both our conversation and what I can see."
+                        "\n\nScreen sharing is ENABLED. I can see your screen. " "I'll analyze what's shown and provide contextual " "assistance based on both our conversation and what I can see."
                     )
                 else:
-                    content[0] += (
-                        "\n\nScreen sharing was attempted but the image could not be processed. "
-                        "Screen sharing is effectively OFF."
-                    )
+                    content[0] += "\n\nScreen sharing was attempted but the image could not be processed. " "Screen sharing is effectively OFF."
             else:
                 # No screen image provided - explicitly tell AI
-                content[0] += (
-                    "\n\nScreen sharing is currently OFF/DISABLED. I cannot see "
-                    "the user's screen. Do not make up or hallucinate screen content."
-                )
+                content[0] += "\n\nScreen sharing is currently OFF/DISABLED. I cannot see " "the user's screen. Do not make up or hallucinate screen content."
 
             logger.info(f"Processing conversation for session {input_data.session_id}")
 
@@ -209,11 +264,28 @@ class MultimodalService:
                 logger.info("Screen context provided in request")
 
             # Generate response using single multimodal call
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content(content)
-            )
+            response = await asyncio.get_event_loop().run_in_executor(None, lambda: self.model.generate_content(content))
 
-            response_text = response.text if response.text else "I apologize, but I couldn't generate a response."
+            # Initialize response_text with the model's response
+            response_text = response.text
+
+            # Check if response contains JSON tool call
+            if response_text and (
+                response_text.startswith("```json")
+                or response_text.startswith("'''json")
+                or response_text.startswith("```jsonrpc")
+                or (response_text.strip().startswith("{") and "jsonrpc" in response_text)
+            ):
+                response_text = await perplexity_tool_handle.handle_tool_call(response_text)
+                response_text, citation_info = perplexity_tool_handle.parse_perplexity_response(response_text)
+                random_intro = random.choice(["According to Perplexity: ", "As per Perplexity: ", "Perplexity says: "])
+                response_text = random_intro + response_text
+
+            # Ensure response_text is a string
+            if not isinstance(response_text, str):
+                response_text = str(response_text) if response_text else "I apologize, but I couldn't generate a response."
+            elif not response_text:
+                response_text = "I apologize, but I couldn't generate a response."
 
             # Save to memory
             memory = self._get_or_create_memory(input_data.session_id)
@@ -260,6 +332,14 @@ class MultimodalService:
                 processing_time=time.time() - start_time,
                 session_id=input_data.session_id,
             )
+
+    async def handle_perplexity_tool_call(self, response: str) -> str:
+        """Handle perplexity tool call"""
+        return await perplexity_tool_handle.handle_tool_call(response)
+
+    async def parse_perplexity_response(self, response: str) -> tuple[str, str]:
+        """Parse perplexity response"""
+        return await perplexity_tool_handle.parse_perplexity_response(response)
 
     def get_conversation_history(self, session_id: str) -> List[Dict[str, Any]]:
         """Get conversation history for a session"""
