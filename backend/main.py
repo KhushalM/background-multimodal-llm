@@ -266,6 +266,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     logger.debug("Handling VAD state update")
                     await handle_vad_state(websocket, message)
 
+                elif message_type == "audio_interrupt":
+                    logger.info("Handling audio interrupt request")
+                    await handle_audio_interrupt(websocket, message)
+
                 elif message_type == "screen_capture_response":
                     logger.info("Handling screen capture response")
                     await handle_screen_capture_response(websocket, message)
@@ -479,6 +483,22 @@ async def handle_vad_state(websocket: WebSocket, message: Dict[str, Any]):
 
     logger.info(f"Received VAD state: {vad_info} at {timestamp}")
 
+    # Check if this is a speech start event
+    if vad_info.get("isSpeaking", False):
+        logger.info("Speech detected - sending speech_active message for potential audio interruption")
+        # Send speech_active message to frontend to check if audio interruption is needed
+        # The frontend will decide whether to actually interrupt based on AI speaking state
+        speech_active_response = {
+            "type": "speech_active",
+            "message": "Speech detected, accumulating audio...",
+            "timestamp": datetime.now().timestamp(),
+            "vad": vad_info,
+        }
+        try:
+            await manager.send_personal_message(json.dumps(speech_active_response), websocket)
+        except Exception as e:
+            logger.error(f"Error sending speech active message: {e}")
+
     # Get STT service
     stt_service = service_manager.get_stt_service()
     if not stt_service:
@@ -534,6 +554,28 @@ async def handle_vad_state(websocket: WebSocket, message: Dict[str, Any]):
         }
 
         await manager.send_personal_message(json.dumps(response), websocket)
+
+
+async def handle_audio_interrupt(websocket: WebSocket, message: Dict[str, Any]):
+    """Handle audio interrupt requests from frontend when speech is detected during AI audio playback."""
+    timestamp = message.get("timestamp")
+    reason = message.get("reason", "speech_detected")
+
+    logger.info(f"Audio interrupt confirmed - AI audio was playing when user spoke at {timestamp}, reason: {reason}")
+
+    # Send acknowledgment back to frontend
+    response = {
+        "type": "audio_interrupt_ack",
+        "message": "Audio interrupt processed - AI audio stopped",
+        "timestamp": datetime.now().timestamp(),
+        "reason": reason,
+    }
+
+    try:
+        await manager.send_personal_message(json.dumps(response), websocket)
+        logger.info("Audio interrupt acknowledgment sent - AI audio successfully interrupted")
+    except Exception as e:
+        logger.error(f"Error sending audio interrupt acknowledgment: {e}")
 
 
 def check_text_for_screen_triggers(text: str) -> Dict[str, Any]:

@@ -35,7 +35,9 @@ const App: React.FC = () => {
   const {
     isAiSpeaking,
     playAudioResponse,
+    stopAudioResponse,
     cleanup: cleanupAudio,
+    isCurrentlyPlaying,
   } = useAudioPlayback();
 
   // Create a ref for the screen capture handler
@@ -85,6 +87,39 @@ const App: React.FC = () => {
       } else if (data.type === "speech_active") {
         // Speech is being accumulated
         setStatusMessage("🎤 Listening... (speech detected)");
+        console.log("Speech detected");
+
+        // Use immediate playing status check (not affected by React state timing)
+        const aiCurrentlyPlaying = isCurrentlyPlaying();
+        console.log("Is AI currently playing?", aiCurrentlyPlaying);
+
+        // Only interrupt if AI is currently speaking
+        if (aiCurrentlyPlaying) {
+          console.log("AI is speaking - interrupting audio response");
+          stopAudioResponse();
+
+          //Send audio interrupt message to backend
+          try {
+            sendMessage({
+              type: "audio_interrupt",
+              timestamp: Date.now(),
+              reason: "speech_detected",
+            });
+            console.log("Audio interrupt message sent to backend");
+          } catch (error) {
+            console.warn("Failed to send audio interrupt message:", error);
+          }
+        } else {
+          console.log("AI is not speaking - no interrupt needed");
+        }
+      } else if (data.type === "audio_interrupt_ack") {
+        // Handle audio interrupt acknowledgment from backend
+        console.log(
+          "✅ Audio interrupt acknowledged by backend:",
+          data.message,
+          "| Reason:",
+          data.reason
+        );
       } else if (data.type === "screen_capture_request") {
         // Handle screen capture request
         setStatusMessage(`Screen capture requested: ${data.reason}`);
@@ -100,7 +135,7 @@ const App: React.FC = () => {
         setStatusMessage(`Error: ${data.message}`);
       }
     },
-    [playAudioResponse]
+    [playAudioResponse, isCurrentlyPlaying]
   );
 
   // WebSocket hook

@@ -46,13 +46,14 @@ export const useVoiceAgent = ({
       const { MicVAD } = await import('@ricky0123/vad-web');
       
       const vad = await MicVAD.new({
+        model: 'v5',
         // Optimized VAD settings for longer speech sessions
         positiveSpeechThreshold: 0.5,  // More sensitive to start speech
         negativeSpeechThreshold: 0.3,  // Less sensitive to end speech
-        redemptionFrames: 16,           // More tolerance for brief pauses
-        frameSamples: 1536,             // Standard frame size
-        preSpeechPadFrames: 4,          // More pre-speech context
-        minSpeechFrames: 8,             // Require sustained speech
+        redemptionFrames: 62,           // More tolerance for brief pauses
+        frameSamples: 512,             // Standard frame size
+        preSpeechPadFrames: 8,          // More pre-speech context
+        minSpeechFrames: 6,             // Require sustained speech
         submitUserSpeechOnPause: true,
         
         onSpeechStart: () => {
