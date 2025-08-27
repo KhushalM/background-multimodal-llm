@@ -311,24 +311,4 @@ SCREEN_CAPTURE_QUALITY = 0.8     # Image quality (0.1-1.0)
 - **Performance**: http://localhost:8000/performance
 - **Logs**: `docker-compose logs -f`
 
-## 🤝 Contributing
 
-1. **Fork the repository**
-2. **Create feature branch**: `git checkout -b feature/amazing-feature`
-3. **Commit changes**: `git commit -m 'Add amazing feature'`
-4. **Push to branch**: `git push origin feature/amazing-feature`
-5. **Open Pull Request**
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **🐛 Bug Reports**: [GitHub Issues](https://github.com/your-repo/issues)
-- **💡 Feature Requests**: [GitHub Discussions](https://github.com/your-repo/discussions)
-- **📖 Documentation**: [./docs/](./docs/)
-
----
-
-**Built with ❤️ for seamless human-AI interaction**
