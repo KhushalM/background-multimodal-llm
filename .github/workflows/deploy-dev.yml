@@ -126,10 +126,10 @@ jobs:
           EOF
           
             # Append secrets safely using environment variables passed from GitHub Actions
-            echo "OPENAI_API_KEY=${OPENAI_API_KEY}" >> .env
-            echo "GEMINI_API_KEY=${GEMINI_API_KEY}" >> .env
-            echo "HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN}" >> .env
-            echo "PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}" >> .env
+            echo "OPENAI_API_KEY=\"${OPENAI_API_KEY}\"" >> .env
+            echo "GEMINI_API_KEY=\"${GEMINI_API_KEY}\"" >> .env
+            echo "HUGGINGFACE_API_TOKEN=\"${HUGGINGFACE_API_TOKEN}\"" >> .env
+            echo "PERPLEXITY_API_KEY=\"${PERPLEXITY_API_KEY}\"" >> .env
           fi
           
           # Validate .env file
