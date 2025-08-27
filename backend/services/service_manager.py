@@ -29,7 +29,7 @@ class ServiceManager:
 
         # API tokens from environment
         self.gemini_token = os.getenv("GEMINI_API_KEY")
-        self.openai_token = os.getenv("OPENAI_API_KEY")
+        self.openai_token = os.getenv("OPENAI_KEY")
 
         # Debug environment loading
         logger.debug(f"Environment loading from: {env_path}")
