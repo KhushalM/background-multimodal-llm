@@ -132,17 +132,6 @@ jobs:
             echo "PERPLEXITY_API_KEY=\"${PERPLEXITY_API_KEY}\"" >> .env
           fi
           
-          # Validate .env file
-          echo "🔍 Validating .env file..."
-          if [ -f .env ]; then
-            echo "✅ .env file created successfully"
-            echo "📋 Environment variables:"
-            grep -E "^[A-Z_]+" .env | head -5 | sed 's/=.*/=***/' || echo "No variables found"
-          else
-            echo "❌ .env file creation failed"
-            exit 1
-          fi
-          
           # Copy .env to deployment directory for docker-compose
           echo "📋 Copying .env to deployment directory..."
           cp .env deployment/.env
