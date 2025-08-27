@@ -60,27 +60,19 @@
                 "editor.formatOnSave": true,
                 "editor.codeActionsOnSave": {
                     "source.fixAll.eslint": "explicit"
-                },
-                "remote.autoForwardPorts": false,
-                "remote.portsAttributes": {
-                    "3000": {
-                        "onAutoForward": "ignore"
-                    },
-                    "3001": {
-                        "onAutoForward": "ignore"
-                    }
                 }
             }
         }
     },
     "forwardPorts": [
+        3000,
         8000
     ],
     "otherPortsAction": "ignore",
     "portsAttributes": {
         "3000": {
             "label": "Vite Frontend (React + TypeScript)",
-            "onAutoForward": "ignore"
+            "onAutoForward": "openBrowser"
         },
         "8000": {
             "label": "FastAPI Backend (Multimodal AI)",
@@ -102,6 +94,6 @@
         "HF_HOME": "/workspace/data/hf_cache",
         // API endpoints
         "BACKEND_URL": "http://localhost:8000",
-        "FRONTEND_URL": "http://localhost:3001"
+        "FRONTEND_URL": "http://localhost:3000"
     }
 }
