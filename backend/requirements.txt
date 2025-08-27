@@ -55,3 +55,7 @@ requests>=2.31.0
 
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
+
+# Advanced AI Frameworks
+dspy-ai>=2.4.0
+langgraph>=0.0.40

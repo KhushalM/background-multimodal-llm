@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from models.STT import STTService, create_stt_service
 from models.multimodal import MultimodalService, create_multimodal_service
+from models.enhanced_multimodal import EnhancedMultimodalService, create_enhanced_multimodal_service
 from models.TTS import TTSService, create_tts_service
 
 # Load environment variables
@@ -23,7 +24,7 @@ class ServiceManager:
 
     def __init__(self):
         self.stt_service: Optional[STTService] = None
-        self.multimodal_service: Optional[MultimodalService] = None
+        self.multimodal_service: Optional[EnhancedMultimodalService] = None
         self.tts_service: Optional[TTSService] = None
 
         # API tokens from environment
@@ -48,13 +49,13 @@ class ServiceManager:
                 logger.warning("OPENAI_KEY: " + str(self.openai_token))
                 logger.warning("No OpenAI API key found, STT service not available")
 
-            # Initialize Multimodal service (still needs API key)
+            # Initialize Enhanced Multimodal service (with DSPy + LangGraph tool calling)
             if self.gemini_token:
-                logger.info("Initializing Multimodal service with screen context...")
-                self.multimodal_service = await create_multimodal_service(api_key=self.gemini_token, model_name="gemini-2.0-flash-exp")
-                logger.info("Multimodal service with screen context initialized successfully")
+                logger.info("Initializing Enhanced Multimodal service with DSPy + LangGraph...")
+                self.multimodal_service = await create_enhanced_multimodal_service(api_key=self.gemini_token, model_name="gemini-2.0-flash-exp", enable_enhanced_tool_calling=True)
+                logger.info("Enhanced Multimodal service initialized successfully")
             else:
-                logger.warning("No Gemini API key found, Multimodal service not available")
+                logger.warning("No Gemini API key found, Enhanced Multimodal service not available")
 
             # Initialize TTS service (now uses OpenAI TTS API)
             if self.openai_token:

@@ -268,6 +268,9 @@ const App: React.FC = () => {
             <Text fontSize="lg" color="gray.600">
               Interactive voice and screen sharing assistant
             </Text>
+            <Text fontSize="sm" color="orange.500" fontWeight="medium">
+              Web Browser recommended for Screen Sharing
+            </Text>
 
             <StatusDisplay
               isConnected={isConnected}

@@ -39,6 +39,10 @@ dependencies = [
     "langchain-openai>=0.0.5",
     "langchain-google-genai>=0.0.6",
     
+    # Advanced AI Frameworks
+    "dspy-ai>=2.4.0",
+    "langgraph>=0.0.40",
+    
     # FastAPI Backend
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
