@@ -185,18 +185,46 @@ async def root():
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "services": {
-            "stt": service_manager.get_stt_service() is not None,
-            "multimodal_with_screen_context": service_manager.get_multimodal_service() is not None,
-            "tts": service_manager.get_tts_service() is not None,
-            "ready": service_manager.is_ready(),
-            "fully_ready": service_manager.is_fully_ready(),
-        },
-        "performance": performance_monitor.get_performance_summary(),
-    }
+    try:
+        # Always return 200 OK for basic health check, but include service status
+        stt_available = service_manager.get_stt_service() is not None
+        multimodal_available = service_manager.get_multimodal_service() is not None
+        tts_available = service_manager.get_tts_service() is not None
+
+        return {
+            "status": "healthy",  # Always healthy for basic server response
+            "timestamp": datetime.now().isoformat(),
+            "server_running": True,
+            "services": {
+                "stt": stt_available,
+                "multimodal_with_screen_context": multimodal_available,
+                "tts": tts_available,
+                "ready": service_manager.is_ready(),
+                "fully_ready": service_manager.is_fully_ready(),
+            },
+            "environment": {
+                "openai_key_present": bool(service_manager.openai_token and service_manager.openai_token != "***"),
+                "gemini_key_present": bool(service_manager.gemini_token and service_manager.gemini_token != "***"),
+                "openai_key_length": len(service_manager.openai_token) if service_manager.openai_token else 0,
+                "gemini_key_length": len(service_manager.gemini_token) if service_manager.gemini_token else 0,
+            },
+            "performance": performance_monitor.get_performance_summary(),
+        }
+    except Exception as e:
+        logger.error(f"Health check error: {e}")
+        return {
+            "status": "error",
+            "timestamp": datetime.now().isoformat(),
+            "server_running": True,
+            "error": str(e),
+            "services": {
+                "stt": False,
+                "multimodal_with_screen_context": False,
+                "tts": False,
+                "ready": False,
+                "fully_ready": False,
+            },
+        }
 
 
 @app.get("/performance")

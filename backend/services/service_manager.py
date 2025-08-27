@@ -46,7 +46,7 @@ class ServiceManager:
                 await self.stt_service.__aenter__()  # Initialize the service
                 logger.info("STT service initialized successfully")
             else:
-                logger.warning("OPENAI_KEY: " + str(self.openai_token))
+                logger.warning("OPENAI_API_KEY: " + str(self.openai_token))
                 logger.warning("No OpenAI API key found, STT service not available")
 
             # Initialize Enhanced Multimodal service (with DSPy + LangGraph tool calling)
