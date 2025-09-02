@@ -155,6 +155,8 @@ class EnhancedMultimodalService:
 
         # Format system prompt with available tools
         tools_list = ", ".join(self.available_tools) if self.available_tools else "No tools available"
+        # Remove research and reasoning from the list
+        tools_list = tools_list.replace("perplexity_research", "").replace("perplexity_reason", "")
         formatted_system_prompt = self.config.system_prompt.replace("{tools}", tools_list)
         context_parts = [formatted_system_prompt]
 
