@@ -1,4 +1,4 @@
-# 🎤🖥️ Multimodal AI Assistant
+# 🎤🖥️ Multimodal Voice Agent
 
 A real-time multimodal AI assistant that combines voice interaction with screen context awareness. Talk to AI while it can see and understand what's on your screen.
 
@@ -16,7 +16,7 @@ A real-time multimodal AI assistant that combines voice interaction with screen 
 
 - **Speech-to-Text**: OpenAI Whisper API
 - **Text-to-Speech**: OpenAI TTS API
-- **Multimodal AI**: Google Gemini 2.0 Flash Exp
+- **Multimodal AI**: Google Gemini 2.0 Pro
 - **Voice Activity Detection**: Silero VAD (via @ricky0123/vad-react)
 
 ### 🛠️ Technical Stack
