@@ -147,6 +147,11 @@ jobs:
           # Stop existing containers
           echo "🛑 Stopping existing containers..."
           docker-compose -f deployment/docker-compose.dev.yml down || echo "No containers to stop"
+
+          # Clean up Docker system before deployment
+          echo "🧹 Cleaning up Docker system..."
+          docker system prune -af
+          docker volume prune -f
           
           # Setup MCP Perplexity Docker image (only if needed)
           echo "🔧 Checking MCP Perplexity setup..."
