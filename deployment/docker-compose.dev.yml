@@ -16,7 +16,6 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-placeholder}
       - HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN:-placeholder}
       - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-placeholder}
-      - MCP_PREWARM=1
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
       - CORS_ORIGINS=http://54.211.160.83:3000,http://54.211.160.83:8000,https://back-agent.com,https://api.back-agent.com
     volumes:

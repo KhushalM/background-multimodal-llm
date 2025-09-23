@@ -17,7 +17,6 @@ import json
 import logging
 import time
 from typing import Dict, List, Any
-import os
 from datetime import datetime
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -54,24 +53,21 @@ async def startup_event():
     logger.info("All services initialized")
 
     # Prewarm MCP Perplexity client: connect and list tools once
-    if os.getenv("MCP_PREWARM") == "1":
-        try:
-            from MCP.mcp_client.client import PerplexityClient
+    try:
+        from MCP.mcp_client.client import PerplexityClient
 
-            client = PerplexityClient()
-            ok = await client.connect()
-            if ok:
-                tools = await client.list_tools()
-                logger.info(f"Prewarmed MCP Perplexity client, tools: {tools}")
-                # store for reuse
-                global shared_client
-                shared_client = client
-            else:
-                logger.warning("Failed to prewarm MCP Perplexity client (connect returned False)")
-        except Exception as e:
-            logger.warning(f"MCP prewarm skipped due to error: {e}")
-    else:
-        logger.info("MCP prewarm disabled (MCP_PREWARM!=1)")
+        client = PerplexityClient()
+        ok = await client.connect()
+        if ok:
+            tools = await client.list_tools()
+            logger.info(f"Prewarmed MCP Perplexity client, tools: {tools}")
+            # store for reuse
+            global shared_client
+            shared_client = client
+        else:
+            logger.warning("Failed to prewarm MCP Perplexity client (connect returned False)")
+    except Exception as e:
+        logger.warning(f"MCP prewarm skipped due to error: {e}")
 
 
 @app.on_event("shutdown")
