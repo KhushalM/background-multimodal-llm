@@ -32,7 +32,16 @@ services:
         uvicorn main:app --host 0.0.0.0 --port 8000 --reload
       "
 
-  # Removed long-lived MCP container; backend spawns MCP via stdio when needed
+  mcp-perplexity:
+    image: mcp/perplexity-ask:latest
+    container_name: mcp-perplexity-dev
+    restart: unless-stopped
+    environment:
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-placeholder}
+    networks:
+      - dev-network
+    stdin_open: true
+    tty: true
 
   frontend:
     build:
@@ -63,4 +72,4 @@ volumes:
 
 networks:
   dev-network:
-    driver: bridge
+    driver: bridge 
