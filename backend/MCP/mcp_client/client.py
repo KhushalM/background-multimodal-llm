@@ -25,8 +25,12 @@ class PerplexityClient:
         """Start the MCP Perplexity server"""
         try:
             if self.is_connected:
-                logger.info("MCP server already connected")
-                return True
+                # verify the process is still alive
+                if not self.proc or self.proc.poll() is not None:
+                    self.is_connected = False
+                else:
+                    logger.info("MCP server already connected")
+                    return True
 
             logger.info("Starting MCP Perplexity server...")
             docker_cmd = ["docker", "run", "-i", "--rm", "-e", f"PERPLEXITY_API_KEY={PERPLEXITY_API_KEY}", "mcp/perplexity-ask"]
@@ -35,13 +39,32 @@ class PerplexityClient:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
+                text=False,  # use binary mode for proper framing
                 bufsize=0,
             )
 
-            self.is_connected = True
-            logger.info("MCP Perplexity server started successfully")
-            return True
+            # perform handshake: tools/list
+            handshake = self._send_framed({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list",
+                "params": {},
+            })
+
+            if handshake and isinstance(handshake, dict) and "result" in handshake:
+                self.is_connected = True
+                logger.info("MCP Perplexity server started successfully")
+                return True
+            else:
+                stderr_output = b""
+                if self.proc and self.proc.stderr:
+                    try:
+                        stderr_output = self.proc.stderr.read() or b""
+                    except Exception:
+                        pass
+                logger.error(f"Handshake failed. Server stderr: {stderr_output.decode('utf-8', 'ignore')}")
+                self.close()
+                return False
 
         except Exception as e:
             logger.error(f"Failed to start MCP server: {e}")
@@ -49,26 +72,62 @@ class PerplexityClient:
             return False
 
     def _send_request(self, method: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Send a request to the MCP server"""
+        """Send a request to the MCP server using framed stdio"""
         if not self.is_connected or not self.proc or not self.proc.stdin or not self.proc.stdout:
             logger.error("MCP server not connected or stdin/stdout not available")
             return None
 
         try:
             request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-
-            request_json = json.dumps(request) + "\n"
-            self.proc.stdin.write(request_json)
-            self.proc.stdin.flush()
-
-            # Read response
-            response_line = self.proc.stdout.readline()
-            if response_line:
-                return json.loads(response_line.strip())
-            return None
-
+            return self._send_framed(request)
         except Exception as e:
             logger.error(f"Error sending request: {e}")
+            return None
+
+    def _send_framed(self, obj: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Send Content-Length framed JSON-RPC over stdio and read response"""
+        if not self.proc or not self.proc.stdin or not self.proc.stdout:
+            return None
+
+        body = json.dumps(obj).encode("utf-8")
+        header = f"Content-Length: {len(body)}\r\n\r\n".encode("ascii")
+
+        # write header and body
+        self.proc.stdin.write(header)
+        self.proc.stdin.flush()
+        self.proc.stdin.write(body)
+        self.proc.stdin.flush()
+
+        # read headers
+        r = self.proc.stdout
+        content_length: Optional[int] = None
+        while True:
+            line = r.readline()
+            if not line:
+                return None
+            # lines are bytes in binary mode
+            line = line.rstrip(b"\r\n")
+            if line == b"":
+                break
+            if line.lower().startswith(b"content-length:"):
+                try:
+                    content_length = int(line.split(b":", 1)[1].strip())
+                except Exception:
+                    return None
+        if content_length is None:
+            return None
+
+        remaining = content_length
+        chunks: list[bytes] = []
+        while remaining > 0:
+            chunk = r.read(remaining)
+            if not chunk:
+                return None
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        try:
+            return json.loads(b"".join(chunks).decode("utf-8"))
+        except Exception:
             return None
 
     async def list_tools(self) -> Optional[List[str]]:
@@ -90,14 +149,7 @@ class PerplexityClient:
             return None
         try:
             request = json.loads(json_rpc_request)
-            request_json = json.dumps(request) + "\n"
-            self.proc.stdin.write(request_json)
-            self.proc.stdin.flush()
-
-            response_line = self.proc.stdout.readline()
-            if response_line:
-                return json.loads(response_line.strip())
-            return None
+            return self._send_framed(request)
 
         except Exception as e:
             logger.error(f"Error sending request: {e}")

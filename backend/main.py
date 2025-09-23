@@ -28,6 +28,7 @@ from services.service_manager import service_manager
 from services.performance_monitor import performance_monitor, PerformanceTimer
 from models.multimodal import ConversationInput
 from models.TTS import TTSRequest
+from MCP.mcp_client.perplexity_tool_handle import shared_client, PerplexityToolHandle
 
 # Set up logging
 logging.basicConfig(
@@ -51,12 +52,37 @@ async def startup_event():
     await service_manager.initialize_services()
     logger.info("All services initialized")
 
+    # Prewarm MCP Perplexity client: connect and list tools once
+    try:
+        from MCP.mcp_client.client import PerplexityClient
+
+        client = PerplexityClient()
+        ok = await client.connect()
+        if ok:
+            tools = await client.list_tools()
+            logger.info(f"Prewarmed MCP Perplexity client, tools: {tools}")
+            # store for reuse
+            global shared_client
+            shared_client = client
+        else:
+            logger.warning("Failed to prewarm MCP Perplexity client (connect returned False)")
+    except Exception as e:
+        logger.warning(f"MCP prewarm skipped due to error: {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup services on shutdown"""
     await service_manager.cleanup_services()
     logger.info("All services cleaned up")
+
+    # Cleanup shared MCP client
+    try:
+        from MCP.mcp_client.perplexity_tool_handle import shared_client as _shared
+        if _shared:
+            _shared.close()
+    except Exception:
+        pass
 
 
 # Note: Removed custom signal handlers to let uvicorn handle shutdown naturally

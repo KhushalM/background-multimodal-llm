@@ -1,12 +1,17 @@
 from .client import PerplexityClient
 import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# Optional shared client that can be prewarmed at app startup
+shared_client: Optional[PerplexityClient] = None
 
 
 class PerplexityToolHandle:
     def __init__(self):
-        self.perplexity_client = PerplexityClient()
+        global shared_client
+        self.perplexity_client = shared_client if shared_client else PerplexityClient()
 
     async def handle_tool_call(self, response: str) -> str:
         """Handle tool call"""
